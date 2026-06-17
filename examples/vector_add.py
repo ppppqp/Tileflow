@@ -14,4 +14,3 @@ def vector_add(
 if __name__ == "__main__":
     compiled = tf.compile(vector_add)
     print(compiled.mlir)
-

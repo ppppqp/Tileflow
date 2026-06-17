@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import inspect
+import logging
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -41,9 +42,11 @@ def program_id(axis: int) -> Expr:
 
 
 def trace(k: Kernel) -> KernelIR:
+    logging.debug("Tracing kernel: %s", k.name)
     builder = IRBuilder(k.name)
-    proxies = []
+    proxies: list[TensorProxy] = []
     for index, param in enumerate(k.signature.parameters.values()):
+        logging.debug("Kernel params: %s", k.signature.parameters)
         annotation = param.annotation
         if not isinstance(annotation, TensorType):
             raise TypeError(
@@ -52,6 +55,9 @@ def trace(k: Kernel) -> KernelIR:
         arg = builder.argument(param.name, index, annotation.dtype, annotation.rank)
         proxies.append(TensorProxy(builder, arg))
 
+    logging.debug("Kernel tensor proxies: %s", proxies)
+    # mimicing stack for nested kernel calls.
+    # which also makes sense to use context manager
     previous = getattr(_state, "builder", None)
     _state.builder = builder
     try:
@@ -59,4 +65,3 @@ def trace(k: Kernel) -> KernelIR:
     finally:
         _state.builder = previous
     return builder.ir
-

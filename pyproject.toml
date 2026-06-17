@@ -7,28 +7,29 @@ name = "tileflow"
 version = "0.0.0"
 description = "Experimental Python DSL compiler with layout inference and MLIR lowering."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 license = "MIT"
 authors = [{ name = "TileFlow Contributors" }]
 classifiers = [
   "Development Status :: 2 - Pre-Alpha",
   "Intended Audience :: Developers",
   "Intended Audience :: Science/Research",
-  "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3.10",
-  "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Topic :: Software Development :: Compilers",
 ]
 dependencies = []
 
+[tool.pyright]
+include = ["src", "examples", "tests"]
+exclude = ["ref", "**/__pycache__"]
+reportInvalidTypeForm = "none"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "B", "UP"]
