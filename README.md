@@ -2,7 +2,7 @@
 
 TileFlow is an experimental Python DSL compiler for tiled GPU kernels. The goal is a TileLang-like authoring experience with first-class layout inference and an explicit lowering path to MLIR.
 
-The initial scaffold is intentionally small: it captures Python DSL operations into a lightweight IR, runs layout inference and pipeline planning passes, and emits inspectable MLIR-like text. Native MLIR dialect bindings, backend-specific lowering, and runtime dispatch are future milestones.
+The current goal is to capture Python DSL operations into a lightweight IR, run layout inference and pipeline planning passes, and emits inspectable MLIR-like text. Native MLIR dialect bindings, backend-specific lowering, and runtime dispatch are future milestones.
 
 ## Direction
 
