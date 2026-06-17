@@ -26,11 +26,11 @@ def plan_pipeline(ir: KernelIR) -> list[PipelineStage]:
     compute_ops: list[Operation] = []
     stores: list[Operation] = []
     for op in ir.ops:
-        if op.kind == "load":
+        if op.kind in {"load", "copy", "async_copy"}:
             memory_ops.append(op)
         elif op.kind == "store":
             stores.append(op)
-        elif op.kind not in {"const", "program_id"}:
+        elif op.kind in {"gemm", "clear", "parallel_for", "pipelined_for", "assign"}:
             compute_ops.append(op)
 
     stages: list[PipelineStage] = []
@@ -41,4 +41,3 @@ def plan_pipeline(ir: KernelIR) -> list[PipelineStage]:
     if stores:
         stages.append(PipelineStage(len(stages), tuple(op.kind for op in stores), "global memory write"))
     return stages
-

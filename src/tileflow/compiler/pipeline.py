@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from tileflow.compiler.ast_frontend import parse_jit_function
 from tileflow.compiler.mlir import emit_mlir
 from tileflow.compiler.passes import PipelineStage, plan_pipeline, run_layout_inference
-from tileflow.dsl.kernel import Kernel, trace
+from tileflow.dsl import JitFunction
 from tileflow.ir import KernelIR
 from tileflow.layout import LayoutConstraint
 
@@ -20,8 +21,8 @@ class CompiledKernel:
     mlir: str
 
 
-def compile(kernel: Kernel) -> CompiledKernel:
-    ir = trace(kernel)
+def compile(kernel: JitFunction, **params) -> CompiledKernel:
+    ir = parse_jit_function(kernel, params)
     layouts = run_layout_inference(ir)
     pipeline = plan_pipeline(ir)
     mlir = emit_mlir(ir, layouts, pipeline)
@@ -32,4 +33,3 @@ def compile(kernel: Kernel) -> CompiledKernel:
         pipeline=pipeline,
         mlir=mlir,
     )
-

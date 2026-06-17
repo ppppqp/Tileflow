@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 
-@dataclass(frozen=True)
+@dataclass
 class TensorArg:
     name: str
     index: int
@@ -67,4 +67,3 @@ class IRBuilder:
             Operation(kind=kind, result=result, operands=operands or [], attrs=attrs or {})
         )
         return result
-

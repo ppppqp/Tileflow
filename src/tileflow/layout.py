@@ -43,11 +43,19 @@ def infer_layouts(ir: KernelIR) -> dict[str, LayoutConstraint]:
     """
 
     constraints: dict[str, LayoutConstraint] = {}
-    indexed_tensors = {
-        op.attrs["tensor"]
+    declared_tensors = {
+        op.attrs["name"]
         for op in ir.ops
-        if op.kind in {"load", "store"} and "tensor" in op.attrs
+        if op.kind == "tensor_decl" and "name" in op.attrs
     }
+    indexed_tensors = set(declared_tensors)
+    for op in ir.ops:
+        if op.kind == "store" and "target" in op.attrs:
+            indexed_tensors.add(str(op.attrs["target"]).split("[", 1)[0])
+        if op.kind in {"copy", "async_copy"}:
+            for key in ("arg0", "arg1"):
+                if key in op.attrs:
+                    indexed_tensors.add(str(op.attrs[key]).split("[", 1)[0])
     for arg in ir.args:
         if arg.name not in indexed_tensors:
             continue
@@ -57,5 +65,26 @@ def infer_layouts(ir: KernelIR) -> dict[str, LayoutConstraint]:
             layout=Layout.contiguous(rank),
             reason="default contiguous layout inferred from indexed tensor argument",
         )
+    for op in ir.ops:
+        if op.kind == "empty" and "name" in op.attrs:
+            name = str(op.attrs["name"])
+            constraints[name] = LayoutConstraint(
+                tensor=name,
+                layout=Layout.contiguous(_rank_from_shape(op.attrs.get("arg0")) or 1),
+                reason="default contiguous layout inferred from output allocation",
+            )
     return constraints
 
+
+def _rank_from_shape(shape: object) -> int | None:
+    if shape is None:
+        return None
+    text = str(shape)
+    if (text.startswith("(") and text.endswith(")")) or (
+        text.startswith("[") and text.endswith("]")
+    ):
+        body = text[1:-1].strip()
+        if not body:
+            return 0
+        return len([part for part in body.split(",") if part.strip()])
+    return 1

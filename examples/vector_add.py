@@ -1,16 +1,21 @@
-import tileflow as tf
+import tileflow
+import tileflow.language as T
 
 
-@tf.kernel
-def vector_add(
-    a: tf.TensorType("f32", rank=1),
-    b: tf.TensorType("f32", rank=1),
-    c: tf.TensorType("f32", rank=1),
-):
-    i = tf.program_id(0)
-    c[i] = a[i] + b[i]
+@tileflow.jit
+def vector_add(A, B, N: int):
+    A: T.Tensor((N,), T.float32)
+    B: T.Tensor((N,), T.float32)
+    C = T.empty((N,), T.float32)
+
+    with T.Kernel(T.ceildiv(N, 128), threads=128) as bx:
+        for tx in T.Parallel(128):
+            i = bx * 128 + tx
+            C[i] = A[i] + B[i]
+
+    return C
 
 
 if __name__ == "__main__":
-    compiled = tf.compile(vector_add)
+    compiled = vector_add.compile(N=1024)
     print(compiled.mlir)

@@ -1,16 +1,17 @@
 # TileFlow
 
-TileFlow is an experimental Python DSL compiler for tiled GPU kernels. The goal is a TileLang-like authoring experience with first-class layout inference and an explicit lowering path to MLIR.
+TileFlow is an experimental compiler for TileLang-compatible Python DSL kernels. The goal is to keep the source language close to TileLang while replacing the TVM/TIR backend path with a frontend IR designed for MLIR lowering.
 
-The current goal is to capture Python DSL operations into a lightweight IR, run layout inference and pipeline planning passes, and emits inspectable MLIR-like text. Native MLIR dialect bindings, backend-specific lowering, and runtime dispatch are future milestones.
+The current goal is to parse TileLang-style Python functions into a lightweight IR, run layout inference and pipeline planning passes, and emit inspectable MLIR-like text. Native MLIR dialect bindings, backend-specific lowering, and runtime dispatch are future milestones.
 
 ## Direction
 
 TileFlow is designed around this pipeline:
 
 ```text
-Python @tileflow.kernel
-    -> traced TileFlow IR
+Python @tileflow.jit + tileflow.language as T
+    -> TileLang-compatible AST frontend
+    -> TileFlow frontend IR
     -> layout inference
     -> pipelining analysis
     -> MLIR module text
@@ -26,21 +27,31 @@ The project is informed by two local references:
 
 ```bash
 python -m pip install -e ".[dev]"
-python examples/vector_add.py
-pytest
+python3 examples/vector_add.py
+python3 examples/tilelang_matmul.py
+python3 -m pytest -q
 ```
 
 Example:
 
 ```python
-import tileflow as tf
+import tileflow
+import tileflow.language as T
 
-@tf.kernel
-def add(a: tf.TensorType("f32"), b: tf.TensorType("f32"), c: tf.TensorType("f32")):
-    i = tf.program_id(0)
-    c[i] = a[i] + b[i]
+@tileflow.jit
+def add(A, B, N: int):
+    A: T.Tensor((N,), T.float32)
+    B: T.Tensor((N,), T.float32)
+    C = T.empty((N,), T.float32)
 
-compiled = tf.compile(add)
+    with T.Kernel(T.ceildiv(N, 128), threads=128) as bx:
+        for tx in T.Parallel(128):
+            i = bx * 128 + tx
+            C[i] = A[i] + B[i]
+
+    return C
+
+compiled = add.compile(N=1024)
 print(compiled.mlir)
 ```
 
@@ -48,10 +59,11 @@ print(compiled.mlir)
 
 ```text
 src/tileflow/
-  dsl/          User-facing decorators, tensor proxies, and types.
+  dsl/          User-facing JIT decorator.
+  language.py   TileLang-compatible `T` namespace.
   ir.py         Minimal SSA-style traced IR.
   layout.py     Layout model and inference helpers.
-  compiler/     Compile orchestration, passes, and MLIR emitter.
+  compiler/     AST frontend, compile orchestration, passes, and MLIR emitter.
 examples/       Small runnable DSL examples.
 tests/          Smoke tests for tracing and pass behavior.
 docs/           Design notes.
@@ -60,9 +72,9 @@ docs/           Design notes.
 ## Milestones
 
 1. Python frontend
-   - Trace tensor indexing, arithmetic, stores, constants, and program IDs.
-   - Add structured control flow capture.
-   - Define ergonomic TileLang-inspired allocation/copy/reduction syntax.
+   - Parse TileLang-compatible tensor declarations, allocations, kernel launches, loops, copies, and stores.
+   - Expand compatibility across common TileLang examples.
+   - Keep parser/IR internals MLIR-oriented rather than TVM/TIR-shaped.
 
 2. Layout inference
    - Infer default layouts from tensor rank and access patterns.
@@ -82,4 +94,3 @@ docs/           Design notes.
 ## Current Status
 
 This is a bootstrap, not a production compiler. It is useful for iterating on the frontend API, pass contracts, and emitted IR shape while the native MLIR dialect is designed.
-
