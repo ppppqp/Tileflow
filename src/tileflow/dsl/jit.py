@@ -28,4 +28,3 @@ def jit(fn: Callable[..., Any] | None = None, *, target: str | None = None):
     if fn is None:
         return lambda real_fn: JitFunction(real_fn, target=target)
     return JitFunction(fn, target=target)
-

@@ -9,6 +9,11 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from tileflow.ir import IRBuilder, KernelIR
+import logging
+
+
+# FIXME: this is not robust. we should not assume user always import tileflow.language as T, and we should support more flexible patterns for symbol definition and buffer declaration.
+# e.g. currently only `A: T.Tensor(...)` is recognized for buffer declaration, but users may also want to write `A = T.empty(...)` or even `A = T.Tensor(...)
 
 
 @dataclass
@@ -20,14 +25,11 @@ class ParseContext:
 
 def parse_jit_function(jit_fn, params: dict[str, Any] | None = None) -> KernelIR:
     params = params or {}
-    try:
-        source = textwrap.dedent(inspect.getsource(jit_fn.fn))
-    except OSError as exc:
-        raise RuntimeError(
-            "TileFlow's TileLang-compatible frontend parses Python source with inspect.getsource. "
-            "Define @tileflow.jit kernels in a .py file instead of an interactive stdin/eval block."
-        ) from exc
+    source = textwrap.dedent(inspect.getsource(jit_fn.fn))
     module = ast.parse(source)
+
+    logging.debug("Parsing function %s with params %s", jit_fn.name, params)
+    # logging.debug(("AST for function %s:\n%s", jit_fn.name, ast.dump(module, indent=4)))
     fn_node = next(node for node in module.body if isinstance(node, ast.FunctionDef))
     builder = IRBuilder(jit_fn.name)
     ctx = ParseContext(symbols=dict(params))
@@ -81,8 +83,12 @@ def _parse_assign(stmt: ast.Assign, builder: IRBuilder, ctx: ParseContext) -> No
     value = stmt.value
 
     if _is_call(value, "T", "const"):
+        # T.const for symbol definition
+        assert isinstance(value, ast.Call)
         names = _literal_const_names(value)
+        logging.debug("Defining symbols name: %s from T.const call", names)
         targets = _target_names(target)
+        logging.debug("Defining targets name: %s from T.const call", targets)
         for name, target_name in zip(names, targets, strict=False):
             resolved = ctx.symbols.get(target_name, name)
             ctx.symbols[target_name] = resolved
@@ -101,14 +107,17 @@ def _parse_assign(stmt: ast.Assign, builder: IRBuilder, ctx: ParseContext) -> No
             "T.alloc_var",
             "T.alloc_tmem",
         }:
+            # assignment/allocation for buffers
             attrs = _call_attrs(value, ctx)
             attrs["name"] = target_name
             attrs["callee"] = callee
             ctx.buffers[target_name] = attrs
             builder.emit(_op_name_for_alloc(callee), attrs=attrs, has_result=False)
             return
+        # the else case fall through to emit unsupported_assign
 
     if isinstance(target, ast.Subscript):
+        # a[i] = ... style assignment
         builder.emit(
             "store",
             attrs={"target": _expr(target, ctx), "value": _expr(value, ctx)},
@@ -139,7 +148,14 @@ def _parse_ann_assign(stmt: ast.AnnAssign, builder: IRBuilder, ctx: ParseContext
                 arg.dtype = dtype
                 arg.rank = _rank_from_shape(shape)
                 break
-        builder.emit("tensor_decl", attrs={"name": name, "shape": shape, "dtype": dtype}, has_result=False)
+        builder.emit(
+            "tensor_decl", attrs={"name": name, "shape": shape, "dtype": dtype}, has_result=False
+        )
+    builder.emit(
+        "unsupported_ann_assign",
+        attrs={"target": name, "annotation": _expr(stmt.annotation, ctx)},
+        has_result=False,
+    )
 
 
 def _parse_with(stmt: ast.With, builder: IRBuilder, ctx: ParseContext) -> None:
@@ -154,7 +170,9 @@ def _parse_with(stmt: ast.With, builder: IRBuilder, ctx: ParseContext) -> None:
         _parse_block(stmt.body, builder, ctx)
         builder.emit("kernel_end", has_result=False)
         return
-    builder.emit("unsupported_with", attrs={"context": _expr(item.context_expr, ctx)}, has_result=False)
+    builder.emit(
+        "unsupported_with", attrs={"context": _expr(item.context_expr, ctx)}, has_result=False
+    )
 
 
 def _parse_for(stmt: ast.For, builder: IRBuilder, ctx: ParseContext) -> None:
@@ -167,6 +185,8 @@ def _parse_for(stmt: ast.For, builder: IRBuilder, ctx: ParseContext) -> None:
             loop_kind = "pipelined_for"
         elif callee == "T.Parallel":
             loop_kind = "parallel_for"
+        elif callee == "T.Sequential":
+            loop_kind = "sequential_for"
         attrs["callee"] = callee
     builder.emit(loop_kind, attrs=attrs, has_result=False)
     _parse_block(stmt.body, builder, ctx)
@@ -244,6 +264,8 @@ def _target_names(node: ast.AST | None) -> list[str]:
 
 
 def _rank_from_shape(shape: Any) -> int | None:
+    # Heuristic to determine rank from shape expression. This is not robust and can be improved by better shape parsing.
+    # e.g. it can handle literal tuples/lists like (N, M) or [N, M], but not more complex expressions.
     if shape is None:
         return None
     text = str(shape)
@@ -272,21 +294,22 @@ def _expr(node: ast.AST | None, ctx: ParseContext | None = None) -> str:
 
 
 def _substitute_symbols(node: ast.AST, symbols: dict[str, Any]) -> ast.AST:
+    # e.g. turn `N` in `T.ceildiv(N, 128)` into a constant if `N=1024` is supplied as a parameter.
     expr = ast.parse(ast.unparse(node), mode="eval").body
 
     class Substitute(ast.NodeTransformer):
-        def visit_Name(self, name: ast.Name) -> ast.AST:
-            if name.id not in symbols:
-                return name
-            value = symbols[name.id]
+        def visit_Name(self, node: ast.Name) -> ast.AST:
+            if node.id not in symbols:
+                return node
+            value = symbols[node.id]
             if isinstance(value, (int, float)):
-                return ast.copy_location(ast.Constant(value=value), name)
+                return ast.copy_location(ast.Constant(value=value), node)
             if isinstance(value, str):
                 try:
                     replacement = ast.parse(value, mode="eval").body
                 except SyntaxError:
-                    return name
-                return ast.copy_location(replacement, name)
-            return name
+                    return node
+                return ast.copy_location(replacement, node)
+            return node
 
     return ast.fix_missing_locations(Substitute().visit(expr))

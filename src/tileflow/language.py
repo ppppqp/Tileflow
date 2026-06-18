@@ -67,6 +67,10 @@ def Parallel(*extents: Any):
     return range(0)
 
 
+def Sequential(*extents: Any):
+    return range(0)
+
+
 def alloc_shared(shape: Any, dtype: Any, scope: str = "shared"):
     return {"kind": "alloc_shared", "shape": shape, "dtype": dtype, "scope": scope}
 
@@ -101,4 +105,3 @@ def clear(buffer: Any) -> None:
 
 def max(a: Any, b: Any):
     return a if a >= b else b
-
