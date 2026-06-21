@@ -3,6 +3,7 @@ project(TileFlow LANGUAGES CXX C)
 
 set(CMAKE_CXX_STANDARD 17 CACHE STRING "C++ standard")
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 find_package(MLIR REQUIRED CONFIG)
 find_package(LLVM REQUIRED CONFIG)
@@ -23,4 +24,3 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/mlir/include)
 include_directories(${CMAKE_CURRENT_BINARY_DIR}/mlir/include)
 
 add_subdirectory(mlir)
-

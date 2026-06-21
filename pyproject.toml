@@ -17,7 +17,9 @@ classifiers = [
   "Programming Language :: Python :: 3.12",
   "Topic :: Software Development :: Compilers",
 ]
-dependencies = []
+dependencies = [
+    "pybind11>=3.0.4",
+]
 
 [tool.pyright]
 include = ["src", "examples", "tests"]
@@ -26,6 +28,9 @@ reportInvalidTypeForm = "none"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"tileflow._mlir" = ["*.so"]
 
 [tool.ruff]
 line-length = 100

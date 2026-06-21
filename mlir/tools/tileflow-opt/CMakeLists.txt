@@ -5,6 +5,7 @@ target_link_libraries(tileflow-opt PRIVATE
   MLIRIR
   MLIRParser
   MLIRPass
+  MLIRRegisterAllPasses
   MLIRSupport
   MLIRTransforms
   MLIRFuncDialect
@@ -17,4 +18,3 @@ target_link_libraries(tileflow-opt PRIVATE
 )
 
 mlir_check_all_link_libraries(tileflow-opt)
-

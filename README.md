@@ -25,6 +25,86 @@ The project is informed by two local references:
 
 ## Quick Start
 
+Build the native MLIR tool first, then run the Python examples.
+
+### Configure LLVM/MLIR
+
+If your local LLVM build is at `/home/qiping-pan/Documents/workspace/llvm/llvm-project/build`:
+
+```bash
+export LLVM_BUILD=/home/qiping-pan/Documents/workspace/llvm/llvm-project/build
+export LLVM_DIR="$LLVM_BUILD/lib/cmake/llvm"
+export MLIR_DIR="$LLVM_BUILD/lib/cmake/mlir"
+export PATH="$LLVM_BUILD/bin:$PATH"
+```
+
+If `mlir-tblgen` or `llvm-tblgen` is missing, build them in the LLVM tree:
+
+```bash
+ninja -C "$LLVM_BUILD" llvm-tblgen mlir-tblgen
+```
+
+### Configure TileFlow
+
+For `tileflow-opt` only:
+
+```bash
+cmake -S . -B build -G Ninja \
+  -DLLVM_DIR="$LLVM_DIR" \
+  -DMLIR_DIR="$MLIR_DIR" \
+  -DTILEFLOW_ENABLE_PYTHON_EXTENSION=OFF
+```
+
+For the optional `tileflow_mlir` pybind extension:
+
+```bash
+python -m pip install pybind11
+
+cmake -S . -B build -G Ninja \
+  -DLLVM_DIR="$LLVM_DIR" \
+  -DMLIR_DIR="$MLIR_DIR" \
+  -DTILEFLOW_ENABLE_PYTHON_EXTENSION=ON \
+  -Dpybind11_DIR="$(python -m pybind11 --cmakedir)"
+```
+
+### Build
+
+Generate TableGen `.inc` files:
+
+```bash
+ninja -C build TileFlowDialectIncGen TileFlowPassIncGen
+```
+
+Build the native optimizer:
+
+```bash
+ninja -C build tileflow-opt
+```
+
+Build the optional Python extension:
+
+```bash
+ninja -C build tileflow_mlir
+```
+
+For editable development, install the Python package and copy the extension into
+the package namespace:
+
+```bash
+python -m pip install -e ".[dev]"
+mkdir -p src/tileflow/_mlir
+cp build/mlir/python/tileflow_mlir*.so src/tileflow/_mlir/
+python -c "from tileflow._mlir.tileflow_mlir import PassPipeline; print(PassPipeline)"
+```
+
+### Run
+
+Point Python at the native optimizer if you are not using the pybind extension:
+
+```bash
+export TILEFLOW_OPT="$PWD/build/mlir/tools/tileflow-opt/tileflow-opt"
+```
+
 ```bash
 python -m pip install -e ".[dev]"
 python3 examples/vector_add.py
@@ -32,8 +112,8 @@ python3 examples/tilelang_matmul.py
 python3 -m pytest -q
 ```
 
-The examples require either the `tileflow_mlir` Python extension or a built
-`tileflow-opt` available through `TILEFLOW_OPT` or `PATH`.
+The examples require either the `tileflow._mlir.tileflow_mlir` Python extension
+or a built `tileflow-opt` available through `TILEFLOW_OPT` or `PATH`.
 
 Example:
 

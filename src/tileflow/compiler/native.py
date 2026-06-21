@@ -1,8 +1,7 @@
 """Native MLIR pass pipeline integration.
 
 The Python frontend is intentionally thin. It emits MLIR text, then delegates
-verification and optimization to native MLIR. There is deliberately no Python
-optimization fallback.
+verification and optimization to native MLIR.
 """
 
 from __future__ import annotations
@@ -33,7 +32,7 @@ def run_native_pipeline(
 
     Resolution order:
 
-    1. `tileflow_mlir.PassPipeline` Python extension.
+    1. `tileflow._mlir.tileflow_mlir.PassPipeline` Python extension.
     2. `tileflow-opt` executable.
 
     Raises when neither native path is available.
@@ -56,7 +55,7 @@ def run_native_pipeline(
 
 def _run_extension(mlir: str, pipeline: str) -> NativePipelineResult | None:
     try:
-        from tileflow_mlir import PassPipeline  # type: ignore[import-not-found]
+        from tileflow._mlir.tileflow_mlir import PassPipeline  # type: ignore[import-not-found]
     except Exception:
         return None
 
