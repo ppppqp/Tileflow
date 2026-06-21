@@ -1,0 +1,9 @@
+#ifndef TILEFLOW_DIALECT_TILEFLOW_IR_TILEFLOWDIALECT_H
+#define TILEFLOW_DIALECT_TILEFLOW_IR_TILEFLOWDIALECT_H
+
+#include "mlir/IR/Dialect.h"
+
+#include "tileflow/Dialect/TileFlow/IR/TileFlowDialect.h.inc"
+
+#endif // TILEFLOW_DIALECT_TILEFLOW_IR_TILEFLOWDIALECT_H
+

@@ -2,7 +2,7 @@
 
 TileFlow is an experimental compiler for TileLang-compatible Python DSL kernels. The goal is to keep the source language close to TileLang while replacing the TVM/TIR backend path with a frontend IR designed for MLIR lowering.
 
-The current goal is to parse TileLang-style Python functions into a lightweight IR, run layout inference and pipeline planning passes, and emit inspectable MLIR-like text. Native MLIR dialect bindings, backend-specific lowering, and runtime dispatch are future milestones.
+The current goal is to parse TileLang-style Python functions into MLIR text and immediately delegate verification and optimization to native MLIR passes. Backend-specific lowering and runtime dispatch are future milestones.
 
 ## Direction
 
@@ -32,6 +32,9 @@ python3 examples/tilelang_matmul.py
 python3 -m pytest -q
 ```
 
+The examples require either the `tileflow_mlir` Python extension or a built
+`tileflow-opt` available through `TILEFLOW_OPT` or `PATH`.
+
 Example:
 
 ```python
@@ -58,16 +61,19 @@ print(compiled.mlir)
 ## Repository Layout
 
 ```text
+mlir/          Native MLIR dialect, passes, tools, and optional Python extension.
 src/tileflow/
   dsl/          User-facing JIT decorator.
   language.py   TileLang-compatible `T` namespace.
   ir.py         Minimal SSA-style traced IR.
   layout.py     Layout model and inference helpers.
-  compiler/     AST frontend, compile orchestration, passes, and MLIR emitter.
+  compiler/     AST frontend, compile orchestration, native pass bridge, and MLIR emitter.
 examples/       Small runnable DSL examples.
 tests/          Smoke tests for tracing and pass behavior.
 docs/           Design notes.
 ```
+
+Native build notes: [docs/native-build.md](docs/native-build.md).
 
 ## Milestones
 
@@ -77,7 +83,7 @@ docs/           Design notes.
    - Keep parser/IR internals MLIR-oriented rather than TVM/TIR-shaped.
 
 2. Layout inference
-   - Infer default layouts from tensor rank and access patterns.
+   - Move layout inference into native MLIR passes.
    - Propagate layouts through views, tiles, and shared-memory buffers.
    - Surface diagnostics when layouts are ambiguous or incompatible.
 

@@ -6,30 +6,33 @@ from dataclasses import dataclass
 
 from tileflow.compiler.ast_frontend import parse_jit_function
 from tileflow.compiler.mlir import emit_mlir
-from tileflow.compiler.passes import PipelineStage, plan_pipeline, run_layout_inference
+from tileflow.compiler.native import NativePipelineResult, run_native_pipeline
 from tileflow.dsl import JitFunction
 from tileflow.ir import KernelIR
-from tileflow.layout import LayoutConstraint
 
 
 @dataclass(frozen=True)
 class CompiledKernel:
     name: str
     ir: KernelIR
-    layouts: dict[str, LayoutConstraint]
-    pipeline: list[PipelineStage]
     mlir: str
+    raw_mlir: str
+    native: NativePipelineResult
 
 
-def compile(kernel: JitFunction, **params) -> CompiledKernel:
+def compile(
+    kernel: JitFunction,
+    *,
+    mlir_pipeline: str | None = None,
+    **params,
+) -> CompiledKernel:
     ir = parse_jit_function(kernel, params)
-    layouts = run_layout_inference(ir)
-    pipeline = plan_pipeline(ir)
-    mlir = emit_mlir(ir, layouts, pipeline)
+    raw_mlir = emit_mlir(ir)
+    native = run_native_pipeline(raw_mlir, pipeline=mlir_pipeline)
     return CompiledKernel(
         name=ir.name,
         ir=ir,
-        layouts=layouts,
-        pipeline=pipeline,
-        mlir=mlir,
+        mlir=native.mlir,
+        raw_mlir=raw_mlir,
+        native=native,
     )

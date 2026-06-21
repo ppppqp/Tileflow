@@ -26,5 +26,15 @@ def test_compile_emits_mlir_and_pass_metadata():
     assert "tileflow.tensor_decl" in compiled.mlir
     assert "tileflow.kernel_launch" in compiled.mlir
     assert "tileflow.store" in compiled.mlir
-    assert set(compiled.layouts) == {"A", "B", "C"}
     assert "tileflow.parallel_for" in compiled.mlir
+    assert compiled.raw_mlir
+    assert compiled.native.pipeline == "canonicalize,cse"
+
+
+def test_compile_can_require_native_mlir():
+    try:
+        compiled = add.compile(N=1024, require_native=True)
+    except RuntimeError as exc:
+        assert "native MLIR pipeline unavailable" in str(exc)
+    else:
+        assert compiled.native.ran

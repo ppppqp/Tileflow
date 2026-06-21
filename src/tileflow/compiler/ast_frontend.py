@@ -25,7 +25,13 @@ class ParseContext:
 
 def parse_jit_function(jit_fn, params: dict[str, Any] | None = None) -> KernelIR:
     params = params or {}
-    source = textwrap.dedent(inspect.getsource(jit_fn.fn))
+    try:
+        source = textwrap.dedent(inspect.getsource(jit_fn.fn))
+    except OSError as exc:
+        raise RuntimeError(
+            "TileFlow's TileLang-compatible frontend parses Python source with inspect.getsource. "
+            "Define @tileflow.jit kernels in a .py file instead of an interactive stdin/eval block."
+        ) from exc
     module = ast.parse(source)
 
     logging.debug("Parsing function %s with params %s", jit_fn.name, params)
@@ -151,6 +157,7 @@ def _parse_ann_assign(stmt: ast.AnnAssign, builder: IRBuilder, ctx: ParseContext
         builder.emit(
             "tensor_decl", attrs={"name": name, "shape": shape, "dtype": dtype}, has_result=False
         )
+        return
     builder.emit(
         "unsupported_ann_assign",
         attrs={"target": name, "annotation": _expr(stmt.annotation, ctx)},

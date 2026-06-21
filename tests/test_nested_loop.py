@@ -19,6 +19,7 @@ def reduce_sum(A, B, M: int, N: int):
 
 
 def test_compile_emits_mlir_and_pass_metadata():
+    # Real native behavior is covered by mlir/FileCheck tests once tileflow-opt is built.
     compiled = reduce_sum.compile(M=1024, N=1024)
     assert compiled.name == "reduce_sum"
     assert "func.func @reduce_sum" in compiled.mlir
