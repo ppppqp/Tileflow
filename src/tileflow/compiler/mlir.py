@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from tileflow.ir import KernelIR, Operation, Value
+from tileflow.dsl.ir import KernelIR, Operation, Value
 
 
 def emit_mlir(ir: KernelIR) -> str:

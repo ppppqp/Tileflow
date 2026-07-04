@@ -1,8 +1,5 @@
-"""TileLang-compatible language namespace.
-
-These objects exist so TileFlow programs can use the same source-level shape
-as TileLang programs. The compiler currently consumes them from Python AST
-rather than executing most of them at runtime.
+"""
+Tileflow API
 """
 
 from __future__ import annotations

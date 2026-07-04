@@ -4,11 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from tileflow.compiler.ast_frontend import parse_jit_function
 from tileflow.compiler.mlir import emit_mlir
 from tileflow.compiler.native import NativePipelineResult, run_native_pipeline
 from tileflow.dsl import JitFunction
-from tileflow.ir import KernelIR
+from tileflow.dsl.ir import KernelIR
 
 
 @dataclass(frozen=True)
@@ -20,13 +19,15 @@ class CompiledKernel:
     native: NativePipelineResult
 
 
+# def _compile_jit(jit_fn: JitFunction, args) -> CompiledKernel:
+#     with
+
+
 def compile(
     kernel: JitFunction,
-    *,
-    mlir_pipeline: str | None = None,
-    **params,
+    *args,
 ) -> CompiledKernel:
-    ir = parse_jit_function(kernel, params)
+    ir = _compile_jit(kernel, args)
     raw_mlir = emit_mlir(ir)
     native = run_native_pipeline(raw_mlir, pipeline=mlir_pipeline)
     return CompiledKernel(

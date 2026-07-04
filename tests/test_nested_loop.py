@@ -1,5 +1,5 @@
 import tileflow
-import tileflow.language as T
+import tileflow.dsl.language as T
 
 
 @tileflow.jit

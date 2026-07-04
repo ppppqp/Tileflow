@@ -30,6 +30,7 @@ class Operation:
 
 @dataclass
 class KernelIR:
+    # the compiled kernel function
     name: str
     args: list[TensorArg] = field(default_factory=list)
     ops: list[Operation] = field(default_factory=list)
