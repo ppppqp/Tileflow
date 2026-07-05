@@ -18,6 +18,12 @@ class _empty:
     pass
 
 
+@dataclass
+class IRGenerator:
+    generator: Callable[..., Any]
+    type_hints: dict[str, Any]
+
+
 def parse_jit_function(func: Callable, params: dict) -> JitFunction:
     """Parse a JIT function into IR builder pattern.
 
@@ -28,17 +34,51 @@ def parse_jit_function(func: Callable, params: dict) -> JitFunction:
     Returns:
         A JitFunction object representing the parsed kernel.
     """
-    # Implementation of parsing logic goes here
-    # This is a placeholder for the actual parsing logic
+    ir_generator = mutate(
+        func
+    )  # typehints are things like M, N = T.const("M N") or A: T.Tensor[[M, N], T.float32]
+    # TODO: callable annotations, annotations in function parameters are not implemented
+    sig = inspect.signature(func)
+    annot = ir_generator.type_hints
+    arg_names = list(sig.parameters.keys())
+    tensor_args = {k: v for k, v in annot.items() if isinstance(v, (Buffer, Var))}
+    # TODO: default values
+    return JitFunction(original_func=func, tensor_args=tensor_args, ir_generator=ir_generator)
 
-    pass
+
+def get_func_non_locals(func: Callable) -> dict[str, Any]:
+    code = func.__code__
+    nonlocals = {}
+    if func.__closure__ is not None:
+        for var, cell in zip(code.co_freevars, func.__closure__, strict=True):
+            nonlocals[var] = cell.cell_contents
+    return nonlocals
 
 
-def mutate(func: Callable):
+def mutate(func: Callable) -> IRGenerator:
     # get AST
     source = textwrap.dedent(inspect.getsource(func))
     tree = ast.parse(source)
-    # TODO: closures here
+    nonlocals = get_func_non_locals(func)
+    mut = DSLMutator(nonlocals=nonlocals, globals=func.__globals__)
+    tree = mut.visit(tree)
+    # compiles the transformed AST and extracts the generated make_closure function object from it
+    try:
+        ast.fix_missing_locations(tree)
+        compiled = compile(tree, filename="<ast>", mode="exec")
+    except Exception as e:
+        raise RuntimeError(f"Failed to compile AST for function {func.__name__}") from e
+    locs = {}  # temporary output dictionary to hold compiled definitions
+    exec(compiled, func.__globals__, locs)
+    make_closure = locs.get("make_closure")
+    if make_closure is None:
+        raise RuntimeError(
+            f"Failed to find make_closure in compiled AST for function {func.__name__}"
+        )
+
+    # now fn is a closure that takes in an IRBuilder and returns the transformed function
+    fn = make_closure(**nonlocals)
+    return IRGenerator(generator=fn, type_hints=mut.extra_type_hints)
 
 
 class DSLMutator(ast.NodeTransformer):
@@ -274,6 +314,25 @@ for {tmp} in __tb.ctx_for(range):
 
         for stmt in node.body:
             self._parse_arg_annot(stmt, arg_names)
+        node = self.generic_visit(node)
+        node.body = stmts + node.body
+        node.decorator_list.clear()
+        name = node.name
+        if node.args.kwarg is None:
+            node.args.kwarg = ast.arg(arg="__kwargs")
+        # here we override 'range' with __tb.override that supports the builder pattern
+        return quote1(
+            f"""
+def make_closure({", ".join(self.non_locals.keys())}):
+    def {name}(__tb):
+        __tb_fn = '{name}'
+        range = __tb.override('range')
+        pass
+        return {name}
+    return {name}
+            """,
+            passes=[node],
+        )
 
     def _try_eval(self, node: ast.expr) -> Any:
         # execute python code and get result
@@ -328,6 +387,12 @@ for {tmp} in __tb.ctx_for(range):
                 span=node,
             )
         return last
+
+    def visit_UnaryOp(self, node: ast.UnaryOp):
+        node = self.generic_visit(node)
+        if isinstance(node.op, ast.Not):
+            return quote_expr("__tb.boolop('Not', operand)", operand=node.operand, span=node)
+        return node
 
     def visit_Compare(self, node: ast.Compare):
         node = self.generic_visit(node)
