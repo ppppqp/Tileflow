@@ -1,9 +1,7 @@
-"""Tileflow JIT decorator."""
-
 from __future__ import annotations
 
 from collections.abc import Callable
-from tileflow.dsl.ast import parse_jit_function, JitFunction
+from tileflow.compiler.ast import parse_jit_function, JitFunction
 from tileflow.compiler.compiler import JITImplementation
 
 """

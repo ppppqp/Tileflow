@@ -1,5 +1,5 @@
 """Compiler entry points."""
 
-from .compiler import CompiledKernel
+from .jit import jit
 
-__all__ = ["CompiledKernel"]
+__all__ = ["jit"]

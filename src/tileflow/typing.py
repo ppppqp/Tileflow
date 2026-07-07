@@ -1,4 +1,4 @@
-from tileflow.dsl.dtypes import dtype
+from tileflow.language.dtypes import dtype
 
 type DType = dtype | str
 

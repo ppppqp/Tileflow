@@ -1,13 +1,12 @@
 from __future__ import annotations
 import ast
-from collections.abc import Callable, Sequence
+from collections.abc import Buffer, Callable, Sequence
 from dataclasses import dataclass
 import inspect
 from typing import Any, Literal, cast
-from tileflow.dsl.ir import KernelIR
+from tileflow.language.ir import KernelIR
 import textwrap
-from tileflow.dsl import dtypes
-from tileflow.dsl.language import Buffer, Var
+from tileflow.language import dtypes, Tensor
 
 """
 AST Rewrite to builder pattern
@@ -17,13 +16,13 @@ AST Rewrite to builder pattern
 class JitFunction:
     original_func: Callable[..., Any]
     arg_names: list[str]
-    tensor_args: dict[str, Buffer | Var]
+    tensor_args: dict[str, Tensor]
     ir_generator: IRGenerator
 
     def __init__(
         self,
         original_func: Callable[..., Any],
-        tensor_args: dict[str, Buffer | Var],
+        tensor_args: dict[str, Tensor],
         ir_generator: IRGenerator,
         arg_names: list[str],
     ):
@@ -72,7 +71,7 @@ def parse_jit_function(func: Callable) -> JitFunction:
     sig = inspect.signature(func)
     annot = ir_generator.type_hints
     arg_names = list(sig.parameters.keys())
-    tensor_args = {k: v for k, v in annot.items() if isinstance(v, (Buffer, Var))}
+    tensor_args = {k: v for k, v in annot.items() if isinstance(v, Buffer)}
     # TODO: default values
     return JitFunction(
         original_func=func, tensor_args=tensor_args, ir_generator=ir_generator, arg_names=arg_names
@@ -477,7 +476,7 @@ def make_closure({", ".join(self.non_locals.keys())}):
                 and cexpr.func.attr == "Kernel"
             ):
                 eval_res = self._try_eval(cexpr.func)
-                from tileflow.dsl.language import Kernel
+                from tileflow.language.kernel import Kernel
 
                 if eval_res is Kernel:
                     is_kernel_ctx = True

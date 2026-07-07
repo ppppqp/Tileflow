@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING
 
 
 if TYPE_CHECKING:
-    from tileflow.dsl import JitFunction
-    from tileflow.dsl.ir import KernelIR
+    from tileflow.language import JitFunction
+    from tileflow.language.ir import KernelIR
 
 
 class JITImplementation:
