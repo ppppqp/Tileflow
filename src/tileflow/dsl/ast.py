@@ -5,7 +5,6 @@ from dataclasses import dataclass
 import inspect
 from typing import Any, Literal, cast
 from tileflow.dsl.ir import KernelIR
-from tileflow.dsl.jit import JitFunction
 import textwrap
 from tileflow.dsl import dtypes
 from tileflow.dsl.language import Buffer, Var
@@ -13,6 +12,37 @@ from tileflow.dsl.language import Buffer, Var
 """
 AST Rewrite to builder pattern
 """
+
+
+class JitFunction:
+    original_func: Callable[..., Any]
+    arg_names: list[str]
+    tensor_args: dict[str, Buffer | Var]
+    ir_generator: IRGenerator
+
+    def __init__(
+        self,
+        original_func: Callable[..., Any],
+        tensor_args: dict[str, Buffer | Var],
+        ir_generator: IRGenerator,
+        arg_names: list[str],
+    ):
+        self.original_func = original_func
+        self.name = original_func.__name__
+        self.tensor_args = tensor_args
+        self.ir_generator = ir_generator
+        self.arg_names = arg_names
+
+    def __repr__(self):
+        return f"<tileflow.jit ({self.name})>"
+
+    def parse_args(self, *args, **kwargs):
+        # TODO: phase 2 args (seems tir related?) templates?
+        kwargs.update({k: v for k, v in zip(self.arg_names, args, strict=True)})
+        tensor_args = {}
+        for k in self.tensor_args:
+            tensor_args[k] = kwargs.pop(k)
+        return tensor_args, kwargs
 
 
 class _empty:
@@ -312,7 +342,8 @@ for {tmp} in __tb.ctx_for(range):
         for arg in all_args:
             name = arg.arg
             arg_names.add(name)
-            arg_stmt = quote1(f'{name} = __tb.bind("{name}", {name})', span=arg)
+            print("HERE!", arg)
+            arg_stmt = quote1(f'{name} = __tb.bind("{name}", {name})', span=ast_get_span(arg))
             stmts.append(arg_stmt)
 
         for stmt in node.body:
@@ -490,9 +521,13 @@ quote: convert a string of Python code into an AST node
 """
 
 
-def quote(expr: str, *, passes: list[Any] | None = None, span=None, **kws) -> list[ast.AST]:
+def quote(
+    expr: str, *, passes: list[Any] | None = None, span: ast.AST | Span | None = None, **kws
+) -> list[ast.AST]:
     """Quote a string of Python code into an ast.AST node."""
     tree = ast.parse(expr)
+    if isinstance(span, ast.AST):
+        span = ast_get_span(span)
     tree = QuoteVisitor(kws, passes, span).visit(tree)
     return tree.body
 

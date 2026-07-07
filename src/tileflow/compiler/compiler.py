@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from tileflow.dsl import JitFunction
-from tileflow.dsl.ir import KernelIR
+from typing import TYPE_CHECKING
+
+
+if TYPE_CHECKING:
+    from tileflow.dsl import JitFunction
+    from tileflow.dsl.ir import KernelIR
 
 
 class JITImplementation:

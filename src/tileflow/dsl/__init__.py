@@ -15,7 +15,6 @@ Unlike TileLang, this frontend parses the Python AST into TileFlow's own
 MLIR-oriented IR instead of producing TVM TIR.
 """
 
-from .jit import JitFunction, jit
+from .jit import jit
 
-__all__ = ["JitFunction", "jit"]
-
+__all__ = ["jit"]

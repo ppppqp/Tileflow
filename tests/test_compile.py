@@ -1,7 +1,7 @@
 import logging
 
 import tileflow
-import tileflow.dsl.language as T
+import tileflow.dsl as T
 
 
 @tileflow.jit
@@ -26,7 +26,9 @@ def test_compile_emits_mlir_and_pass_metadata():
 
 def test_compile_can_require_native_mlir():
     try:
-        compiled = add.compile(N=1024, require_native=True)
+        A = T.Tensor((1024,), T.float32)
+        B = T.Tensor((1024,), T.float32)
+        compiled = add.compile(A=)
     except RuntimeError as exc:
         assert "native MLIR pipeline unavailable" in str(exc)
     else:
