@@ -8,6 +8,7 @@ from tileflow.dsl.ir import KernelIR
 from tileflow.dsl.jit import JitFunction
 import textwrap
 from tileflow.dsl import dtypes
+from tileflow.dsl.language import Buffer, Var
 
 """
 AST Rewrite to builder pattern
@@ -24,11 +25,11 @@ class IRGenerator:
     type_hints: dict[str, Any]
 
 
-def parse_jit_function(func: Callable, params: dict) -> JitFunction:
+def parse_jit_function(func: Callable) -> JitFunction:
     """Parse a JIT function into IR builder pattern.
 
     Args:
-        kernel: The JIT function to parse.
+        func: The JIT function to parse.
         params: A dictionary of parameters to pass to the kernel.
 
     Returns:
@@ -43,7 +44,9 @@ def parse_jit_function(func: Callable, params: dict) -> JitFunction:
     arg_names = list(sig.parameters.keys())
     tensor_args = {k: v for k, v in annot.items() if isinstance(v, (Buffer, Var))}
     # TODO: default values
-    return JitFunction(original_func=func, tensor_args=tensor_args, ir_generator=ir_generator)
+    return JitFunction(
+        original_func=func, tensor_args=tensor_args, ir_generator=ir_generator, arg_names=arg_names
+    )
 
 
 def get_func_non_locals(func: Callable) -> dict[str, Any]:

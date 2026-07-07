@@ -22,6 +22,15 @@ uint64 = "uint64"
 bool = "bool"
 
 
+# placeholder class for frontend compilation
+class Buffer:
+    pass
+
+
+class Var:
+    pass
+
+
 @dataclass(frozen=True)
 class TensorSpec:
     shape: Any

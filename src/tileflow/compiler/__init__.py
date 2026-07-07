@@ -1,6 +1,5 @@
 """Compiler entry points."""
 
-from .pipeline import CompiledKernel, compile
+from .compiler import CompiledKernel
 
-__all__ = ["CompiledKernel", "compile"]
-
+__all__ = ["CompiledKernel"]
