@@ -18,6 +18,7 @@ classifiers = [
   "Topic :: Software Development :: Compilers",
 ]
 dependencies = [
+    "numpy>=2.5.1",
     "pybind11>=3.0.4",
 ]
 

@@ -1,3 +1,2 @@
 from .proxy import Tensor
-
-__all__ = ["Tensor"]
+from .dtypes import *
