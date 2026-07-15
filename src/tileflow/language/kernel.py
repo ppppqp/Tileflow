@@ -1,6 +1,9 @@
 from typing import Any
 
 
+# in tilelang, this is constructed as a function that returns a kernel launch frame
+
+
 class Kernel:
     def __init__(self, *grid: Any, threads: Any = None, cluster_dims: Any = None):
         self.grid = grid

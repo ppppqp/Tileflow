@@ -6,8 +6,9 @@ from typing import Any
 
 from tileflow.language.ir import IRBuilder, IndexType, OpName, Region, Span, Value, ValueLike
 from tileflow.language.loop import ForSpec, make_range_spec
+from tileflow.language.proxy import TensorAnnotation, TensorValue
 from tileflow.compiler.ast import _empty
-
+from tileflow.language.kernel import Kernel
 
 @dataclass
 class IfFrame:
@@ -30,6 +31,11 @@ class Builder:
         self.bindings: list[dict[str, Any]] = [
             {}
         ]  # stack of variable bindings for the current scope
+        self._next_param_index = (
+            0  # next parameter index for function arguments (used for TensorValue binding)
+        )
+
+    empty = _empty
 
     @property
     def ir(self):
@@ -64,6 +70,7 @@ class Builder:
         body.entry.args.extend(ivs)
 
         with self.ir_builder.region(body):
+            # should we differentiate?
             yield ivs[0] if len(ivs) == 1 else ivs
 
         operands: list[Value] = []
@@ -109,14 +116,43 @@ class Builder:
         with self.ir_builder.region(frame.else_region):
             yield None
 
-    def bind(self, name: str, value: Any) -> Any:
+    def ctx_with(self, ctx: Kernel):
+        # only support kernel launch context for now
+        body = Region()
+        block_iv = 
+        with self.ir_builder.region(body):
+            yield
+        
+
+    def bind(self, name: str, value: Any, annot: Any | None = None) -> Any:
 
         # handle type annotation, e.g. `A: T.Tensor((N,), T.float32)`
+        if isinstance(annot, TensorAnnotation):
+            tensor = self._bind_tensor(name, annot)
+            if name != "_":
+                self.bindings[-1][name] = tensor
+            return tensor
+
         if value is _empty:
-            return self.ir_builder.new_value
+            return value
         if name != "_":
             self.bindings[-1][name] = value
         return value
+
+    def _bind_tensor(self, name: str, annot: TensorAnnotation) -> TensorValue:
+        value = self.ir_builder.argument(
+            name,
+            self._next_param_index,
+            annot.tensor_type(),
+            name_hint=name,
+        )
+        self._next_param_index += 1
+        return TensorValue(
+            name=name,
+            value=value,
+            shape=annot.shape,
+            element_type=annot.element_type,
+        )
 
     def rval(self, name: str, fallback: Any = None) -> Any:
         for scope in reversed(self.bindings):

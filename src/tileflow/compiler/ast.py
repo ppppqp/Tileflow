@@ -4,7 +4,7 @@ from collections.abc import Buffer, Callable, Sequence
 from dataclasses import dataclass
 import inspect
 from typing import Any, Literal, cast
-from tileflow.language.ir import KernelIR
+from tileflow.language.ir import Type
 import textwrap
 from tileflow.language import dtypes, Tensor
 
@@ -44,7 +44,7 @@ class JitFunction:
         return tensor_args, kwargs
 
 
-class _empty:
+class _empty:  # for type annotation statement
     pass
 
 
@@ -164,7 +164,7 @@ for {tmp} in __tb.ctx_for(range):
         )
 
     def _emit_assign_target(
-        self, target: ast.expr, value: ast.expr, annot: ast.expr = None
+        self, target: ast.expr, value: ast.expr, annot: ast.expr | None = None
     ) -> Sequence[ast.AST]:
         """
         Emit assignment statements for a given target and value.
@@ -173,6 +173,14 @@ for {tmp} in __tb.ctx_for(range):
         """
         # TODO: annotate
         if isinstance(target, ast.Name):
+            if annot is not None:
+                return quote(
+                    f"name = __tb.bind('{target.id}', value, annot=annot)",
+                    name=target,
+                    value=value,
+                    annot=annot,
+                    span=target,
+                )
             return quote(
                 f"name = __tb.bind('{target.id}', value)", name=target, value=value, span=target
             )
@@ -341,7 +349,6 @@ for {tmp} in __tb.ctx_for(range):
         for arg in all_args:
             name = arg.arg
             arg_names.add(name)
-            print("HERE!", arg)
             arg_stmt = quote1(f'{name} = __tb.bind("{name}", {name})', span=ast_get_span(arg))
             stmts.append(arg_stmt)
 
@@ -391,7 +398,7 @@ def make_closure({", ".join(self.non_locals.keys())}):
         # TODO: dtype?
         if isinstance(annot, ast.Attribute) and annot.attr in dtypes._all_dtypes:
             eval_res = self._try_eval(annot)
-            if isinstance(eval_res, dtypes.dtype):
+            if isinstance(eval_res, Type):
                 self.extra_type_hints[name] = eval_res
                 return
         # case 2: T.float32[...] or T.Tensor(...)
@@ -507,7 +514,7 @@ _span_attrs = ["lineno", "col_offset", "end_lineno", "end_col_offset"]
 
 
 def ast_set_span(ast: ast.AST, span: Span):
-    for attr, value in zip(_span_attrs, span):
+    for attr, value in zip(_span_attrs, span, strict=True):
         setattr(ast, attr, value)
 
 
@@ -587,3 +594,10 @@ Operator = Literal[
 
 def get_operator_name(operator: ast.operator) -> Operator:
     return cast(Operator, operator.__class__.__name__)
+
+
+BoolOperator = Literal["And", "Or"]
+
+
+def get_boolop_name(operator: ast.boolop) -> BoolOperator:
+    return cast(BoolOperator, operator.__class__.__name__)

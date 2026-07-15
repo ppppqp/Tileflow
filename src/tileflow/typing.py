@@ -3,4 +3,4 @@ from tileflow.language.dtypes import dtype
 type DType = dtype
 
 # TODO: add PrimExpr support?
-type ShapeType = list[int] | tuple[int]
+type ShapeType = object | list[object] | tuple[object, ...]
