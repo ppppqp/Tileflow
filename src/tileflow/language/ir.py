@@ -356,7 +356,9 @@ class IRBuilder:
         name_hint: str | None = None,
         span: Span | None = None,
     ) -> Value:
-        value = self.new_value(type_, name_hint=name_hint or source_name, owner=self.current_block, span=span)
+        value = self.new_value(
+            type_, name_hint=name_hint or source_name, owner=self.current_block, span=span
+        )
         self.current_block.args.append(value)
         self.ir.params.append(KernelParam(source_name=source_name, index=index, value=value))
         return value
@@ -378,9 +380,7 @@ class IRBuilder:
             regions=regions or [],
             span=span,
         )
-        op.results = [
-            self.new_value(type_, owner=op, span=span) for type_ in (result_types or [])
-        ]
+        op.results = [self.new_value(type_, owner=op, span=span) for type_ in (result_types or [])]
         self.current_block.append(op)
         return op
 
@@ -493,25 +493,6 @@ class IRBuilder:
     def while_op(self, cond_region: Region, body_region: Region) -> None:
         self.append_op(OpName.WHILE, regions=[cond_region, body_region])
 
-    def for_op(
-        self,
-        lo: ValueLike,
-        hi: ValueLike,
-        step: ValueLike,
-        body_region: Region,
-        *,
-        kind: LoopKind = "for",
-    ) -> Value:
-        iv = self.new_value(IndexType(), name_hint="iv")
-        body_region.entry.args.insert(0, iv)
-        self.append_op(
-            OpName.FOR,
-            [self.ensure_value(lo), self.ensure_value(hi), self.ensure_value(step)],
-            attrs={"kind": kind, "iv": iv},
-            regions=[body_region],
-        )
-        return iv
-
     def yield_op(self, values: list[ValueLike] | None = None) -> None:
         self.append_op(OpName.YIELD, [self.ensure_value(value) for value in values or []])
 
@@ -523,4 +504,3 @@ class IRBuilder:
 
     def return_op(self, values: list[ValueLike] | None = None) -> None:
         self.append_op(OpName.RETURN, [self.ensure_value(value) for value in values or []])
-
