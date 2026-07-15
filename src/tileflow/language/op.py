@@ -1,6 +1,5 @@
-from tileflow.language.ir import Operation
+from tileflow.language.ir import Value, ValueLike, current_builder
 
 
-def ceildiv(lhs, rhs):
-    # TODO: return mlir op
-    return Operation(kind="tileflow.ceildiv", result=None, operands=[lhs, rhs], attrs={})
+def ceildiv(lhs: ValueLike, rhs: ValueLike) -> Value:
+    return current_builder().binary("ceildiv", lhs, rhs)

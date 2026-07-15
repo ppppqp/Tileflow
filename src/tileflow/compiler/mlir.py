@@ -2,37 +2,63 @@
 
 from __future__ import annotations
 
-from tileflow.language.ir import KernelIR, Operation, Value
+from tileflow.language.ir import KernelIR, Operation, Type, Value
 
 
 def emit_mlir(ir: KernelIR) -> str:
-    args = ", ".join(f"%{arg.name}: memref<*x{_mlir_type(arg.dtype)}>" for arg in ir.args)
+    args = ", ".join(
+        f"{param.value.ir_name}: {_mlir_value_type(param.value.type)}" for param in ir.params
+    )
     lines = [
         "module {",
         f"  func.func @{ir.name}({args}) {{",
     ]
-    for op in ir.ops:
-        lines.extend(_emit_op(op))
+    lines.extend(_emit_block(ir.body.entry, indent="    "))
     lines.extend(["    return", "  }", "}"])
     return "\n".join(lines)
 
 
-def _emit_op(op: Operation) -> list[str]:
+def _emit_block(block, *, indent: str) -> list[str]:
+    lines: list[str] = []
+    for op in block.ops:
+        lines.extend(_emit_op(op, indent=indent))
+    if block.terminator is not None:
+        lines.extend(_emit_op(block.terminator, indent=indent))
+    return lines
+
+
+def _emit_op(op: Operation, *, indent: str) -> list[str]:
     attrs = _format_attrs(op.attrs)
     operands = ", ".join(_value_name(operand) for operand in op.operands)
-    result = f"{_value_name(op.result)} = " if op.result is not None else ""
-    op_name = f'"tileflow.{op.kind}"'
+    result = ", ".join(_value_name(value) for value in op.results)
+    result_prefix = f"{result} = " if result else ""
+    op_name = str(op.name)
+    if not op_name.startswith(("tileflow.", "arith.", "scf.", "memref.", "func.")):
+        op_name = f"tileflow.{op_name}"
+    op_name = f'"{op_name}"'
     if operands:
-        body = f"{result}{op_name}({operands}){attrs} : () -> ()"
+        body = f"{result_prefix}{op_name}({operands}){attrs} : () -> ()"
     else:
-        body = f"{result}{op_name}(){attrs} : () -> ()"
-    return [f"    {body}"]
+        body = f"{result_prefix}{op_name}(){attrs} : () -> ()"
+    lines = [f"{indent}{body}"]
+    for index, region in enumerate(op.regions):
+        lines.append(f"{indent}// region {index}")
+        lines.extend(_emit_block(region.entry, indent=indent + "  "))
+    return lines
 
 
-def _value_name(value: Value | None) -> str:
-    if value is None:
-        return ""
-    return value.name
+def _value_name(value: object) -> str:
+    if isinstance(value, Value):
+        return value.ir_name
+    return str(value)
+
+
+def _mlir_value_type(type_: Type) -> str:
+    text = str(type_)
+    if text.startswith("tensor<"):
+        element = getattr(type_, "element_type", "f32")
+        return f"memref<*x{_mlir_type(str(element))}>"
+    return _mlir_type(text)
 
 
 def _format_attrs(attrs: dict[str, object]) -> str:
@@ -43,6 +69,8 @@ def _format_attrs(attrs: dict[str, object]) -> str:
 
 
 def _format_attr_value(value: object) -> str:
+    if isinstance(value, Value):
+        return f'"{value.ir_name}"'
     if isinstance(value, bool):
         return "true" if value else "false"
     if isinstance(value, int):
@@ -57,6 +85,15 @@ def _format_attr_value(value: object) -> str:
 
 def _mlir_type(dtype: str) -> str:
     return {
+        "f16": "f16",
+        "f32": "f32",
+        "f64": "f64",
+        "i1": "i1",
+        "i8": "i8",
+        "i16": "i16",
+        "i32": "i32",
+        "i64": "i64",
+        "index": "index",
         "T.float16": "f16",
         "T.float32": "f32",
         "T.float64": "f64",
