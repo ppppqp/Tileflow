@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 
 if TYPE_CHECKING:
-    from tileflow.language import JitFunction
+    from tileflow.compiler.jit import JitFunction
     from tileflow.language.ir import KernelIR
 
 
@@ -24,7 +24,23 @@ class JITImplementation:
         return kernel(*args, **kwargs)
 
     def get_ir(self, *args, **kwargs) -> KernelIR:
-        return self.func(*args, **kwargs)
+        from tileflow.compiler.builder import Builder
+        from tileflow.language.proxy import TensorAnnotation
+
+        call_kwargs = dict(kwargs)
+        for name, value in zip(self.jit_function.arg_names, args, strict=False):
+            call_kwargs[name] = value
+        for name in self.jit_function.arg_names:
+            call_kwargs.setdefault(name, None)
+        call_kwargs = {
+            name: None if isinstance(value, TensorAnnotation) else value
+            for name, value in call_kwargs.items()
+        }
+
+        with Builder(self.jit_function.name) as builder:
+            traced = self.jit_function.ir_generator.generator(builder)
+            traced(**call_kwargs)
+        return builder.ir
 
     def compile(self, *args, **kwargs) -> CompiledKernel:
         return CompiledKernel(
@@ -49,9 +65,9 @@ class CompiledKernel:
         self.compile_kernel()
 
     def compile_kernel(self):
-        # _compile_and_create_adapter
-        # tilelang.lower
-        pass
+        from tileflow.compiler.mlir import emit_mlir
+
+        self.mlir = emit_mlir(self.ir)
 
     def __call__(self, *args, **kwargs):
         self.torch_function(*args, **kwargs)

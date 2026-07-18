@@ -16,7 +16,7 @@ from typing import Any, Literal
 
 
 MemorySpace = Literal["global", "shared", "local", "fragment", "register", "unknown"]
-LoopKind = Literal["for", "sequential", "parallel", "pipelined"]
+LoopKind = Literal["for", "serial", "parallel", "pipelined"]
 
 
 class OpName(StrEnum):
@@ -55,6 +55,8 @@ class OpName(StrEnum):
     BREAK = "break"
     CONTINUE = "continue"
     RETURN = "return"
+    KERNEL = "kernel"
+    ASSERT = "assert"
 
 
 TERMINATORS = {

@@ -33,7 +33,15 @@ class TensorValue:
 
     @property
     def type(self) -> TensorType:
-        return TensorType(self.shape, self.element_type)
+        if not isinstance(self.value.type, TensorType):
+            raise TypeError(f"tensor value has non-tensor IR type {self.value.type}")
+        return self.value.type
+
+    def __getitem__(self, indices: Any) -> Value:
+        from tileflow.language.ir import current_builder
+
+        normalized = list(indices) if isinstance(indices, tuple) else [indices]
+        return current_builder().load(self.value, normalized, type_=self.element_type)
 
 
 class TensorProxy:

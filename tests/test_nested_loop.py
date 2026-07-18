@@ -1,5 +1,6 @@
 import tileflow
 import tileflow.language as T
+from tileflow.language.ir import OpName
 
 
 @tileflow.jit
@@ -11,7 +12,7 @@ def reduce_sum(A, B, M: int, N: int):
         for tx in T.Parallel(128):
             i = bx * 128 + tx
             acc = 0.0
-            for j in T.Sequential(M):
+            for j in T.Serial(M):
                 acc += A[j, i]
             O[i] = acc
 
@@ -23,7 +24,8 @@ def test_compile_emits_mlir_and_pass_metadata():
     compiled = reduce_sum.compile(M=1024, N=1024)
     assert compiled.name == "reduce_sum"
     assert "func.func @reduce_sum" in compiled.mlir
-    assert "tileflow.parallel_for" in compiled.mlir
-    assert "tileflow.sequential_for" in compiled.mlir
-    assert "tileflow.end_sequential_for" in compiled.mlir
-    assert "tileflow.end_parallel_for" in compiled.mlir
+    kernel = next(op for op in compiled.ir.body.entry.ops if op.name == OpName.KERNEL)
+    parallel = next(op for op in kernel.regions[0].entry.ops if op.name == OpName.FOR)
+    serial = next(op for op in parallel.regions[0].entry.ops if op.name == OpName.FOR)
+    assert parallel.attrs["kind"] == "parallel"
+    assert serial.attrs["kind"] == "serial"

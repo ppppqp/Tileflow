@@ -23,8 +23,11 @@ class ForSpec:
     def rank(self) -> int:
         return len(self.dims)
 
+    def __iter__(self):
+        return iter(self.dims)
 
-def make_range_spec(*args: ValueLike, kind: LoopKind = "sequential") -> ForSpec:
+
+def make_range_spec(*args: ValueLike, kind: LoopKind = "serial") -> ForSpec:
     if len(args) == 1:
         lo, hi, step = 0, args[0], 1
     elif len(args) == 2:
@@ -47,7 +50,7 @@ def Parallel(*extents: ValueLike, **attrs: Any) -> ForSpec:
 
 
 def Serial(*args: ValueLike, **attrs: Any) -> ForSpec:
-    spec = make_range_spec(*args, kind="sequential")
+    spec = make_range_spec(*args, kind="serial")
     return ForSpec(dims=spec.dims, kind=spec.kind, attrs=dict(attrs))
 
 

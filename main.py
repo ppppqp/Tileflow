@@ -15,7 +15,7 @@ def reduce_sum(A, B, M: int, N: int):
         for tx in T.Parallel(128):
             i = bx * 128 + tx
             acc = 0.0
-            for j in T.Sequential(M):
+            for j in T.Serial(M):
                 acc += A[j, i]
             O[i] = acc
 

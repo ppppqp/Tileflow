@@ -129,7 +129,7 @@ class DSLMutator(ast.NodeTransformer):
     def visit_If(self, node: ast.If):
         node = self.generic_visit(node)
         br = self.get_tmp()
-        if len(node.orelse) == 0:
+        if node.orelse:
             return quote(
                 f"""
 for {br} in __tb.ctx_if(cond):
@@ -142,6 +142,16 @@ for {br} in __tb.ctx_if(cond):
                 passes=[node.body, node.orelse],
                 span=node,
             )
+        return quote(
+            f"""
+for {br} in __tb.ctx_if(cond):
+    for _ in __tb.ctx_then({br}):
+        pass
+            """,
+            cond=node.test,
+            passes=[node.body],
+            span=node,
+        )
 
     def visit_Expr(self, node: ast.Expr):
         node = self.generic_visit(node)
@@ -159,7 +169,7 @@ for {tmp} in __tb.ctx_for(range):
     pass
             """,
             range=node.iter,
-            passes=list(stmts) + node.body,
+            passes=[list(stmts) + node.body],
             span=node,
         )
 
@@ -466,14 +476,14 @@ def make_closure({", ".join(self.non_locals.keys())}):
 
     def visit_Return(self, node: ast.Return):
         node = self.generic_visit(node)
-        return quote_expr(
+        return quote1(
             expr="__tb.ret(value)",
             value=node.value,
             span=node,
         )
 
     def visit_With(self, node: ast.With):
-        is_kernel_ctx = False
+        kernel_items: set[int] = set()
         for expr in node.items:
             cexpr = expr.context_expr
             # with Kernel(...) as T:
@@ -486,13 +496,13 @@ def make_closure({", ".join(self.non_locals.keys())}):
                 from tileflow.language.kernel import Kernel
 
                 if eval_res is Kernel:
-                    is_kernel_ctx = True
-                    break
+                    kernel_items.add(id(expr))
         node = self.generic_visit(node)
         for expr in node.items:
-            expr.context_expr = quote_expr("__tb.ctx_with(e)", e=expr.context_expr, span=node)
-        if is_kernel_ctx:
-            return [quote1("if __tb.skip_kernel_ctx(): return"), node]
+            if id(expr) in kernel_items:
+                expr.context_expr = quote_expr(
+                    "__tb.ctx_kernel(e)", e=expr.context_expr, span=node
+                )
         return node
 
     def visit_Assert(self, node: ast.Assert):
@@ -501,7 +511,7 @@ def make_closure({", ".join(self.non_locals.keys())}):
 
     def visit_Name(self, node: ast.Name):
         if isinstance(node.ctx, ast.Load):
-            return quote_expr(f"__tb.rval('{node.id}', node)", span=node)
+            return quote_expr(f"__tb.rval('{node.id}', node)", node=node, span=node)
         return node
 
 
@@ -541,6 +551,8 @@ def quote(
 def quote1(expr: str, *, passes: list[Any] | None = None, span=None, **kws) -> ast.AST:
     """Quote a string of Python code into an ast.AST node."""
     tree = ast.parse(expr)
+    if isinstance(span, ast.AST):
+        span = ast_get_span(span)
     tree = QuoteVisitor(kws, passes, span).visit(tree)
     if len(tree.body) != 1:
         raise ValueError(f"Expected a single statement, got {len(tree.body)}")
@@ -548,7 +560,7 @@ def quote1(expr: str, *, passes: list[Any] | None = None, span=None, **kws) -> a
 
 
 def quote_expr(expr: str, *, passes: list[Any] | None = None, span=None, **kws) -> ast.expr:
-    res = quote1(expr, **kws)
+    res = quote1(expr, passes=passes, span=span, **kws)
     assert isinstance(res, ast.Expr)
     return res.value
 
@@ -558,6 +570,7 @@ class QuoteVisitor(ast.NodeTransformer):
         self.names = names
         self.passes = passes
         self.span = span
+        self.pass_index = 0
 
     def generic_visit(self, node: ast.AST):
         if self.span is not None:
@@ -569,6 +582,13 @@ class QuoteVisitor(ast.NodeTransformer):
         if node.id in self.names:
             return self.names[node.id]
         return node
+
+    def visit_Pass(self, node: ast.Pass):
+        if self.passes is None or self.pass_index >= len(self.passes):
+            return node
+        replacement = self.passes[self.pass_index]
+        self.pass_index += 1
+        return replacement
 
 
 """
