@@ -14,7 +14,7 @@ target_link_libraries(tileflow-opt PRIVATE
   MLIRSCFDialect
   MLIRTileFlowDialect
   MLIRTileFlowTransforms
-  MLIRTools
+  MLIROptLib
 )
 
 mlir_check_all_link_libraries(tileflow-opt)
