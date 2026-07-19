@@ -259,7 +259,7 @@ class Builder:
             output = self.ir_builder.output(
                 name_hint,
                 self._next_output_index,
-                TensorAnnotation(value.shape, value.dtype).tensor_type(),
+                TensorAnnotation(value.shape, value.dtype).buffer_type(),
                 name_hint=name_hint,
             )
             self._next_output_index += 1
@@ -275,7 +275,7 @@ class Builder:
         value = self.ir_builder.argument(
             name,
             self._next_param_index,
-            annot.tensor_type(),
+            annot.buffer_type(),
             name_hint=name,
         )
         self._next_param_index += 1

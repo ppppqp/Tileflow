@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from tileflow.language.ir import KernelIR, Operation, Type, Value
+from tileflow.language.ir import BufferType, KernelIR, Operation, TileType, Type, Value
 
 
 def emit_mlir(ir: KernelIR) -> str:
@@ -55,11 +55,13 @@ def _value_name(value: object) -> str:
 
 
 def _mlir_value_type(type_: Type) -> str:
-    text = str(type_)
-    if text.startswith("tensor<"):
-        element = getattr(type_, "element_type", "f32")
-        return f"memref<*x{_mlir_type(str(element))}>"
-    return _mlir_type(text)
+    if isinstance(type_, BufferType):
+        return f"memref<*x{_mlir_type(str(type_.element_type))}>"
+    if isinstance(type_, TileType):
+        shape = "x".join(str(dim) if isinstance(dim, int) else "?" for dim in type_.shape)
+        prefix = f"{shape}x" if shape else ""
+        return f"tensor<{prefix}{_mlir_type(str(type_.element_type))}>"
+    return _mlir_type(str(type_))
 
 
 def _format_attrs(attrs: dict[str, object]) -> str:

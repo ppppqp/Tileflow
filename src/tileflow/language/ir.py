@@ -46,6 +46,7 @@ class OpName(StrEnum):
     SELECT = "select"
     CALL = "call"
     ALLOC = "alloc"
+    TILE_EMPTY = "tile_empty"
     LOAD = "load"
     STORE = "store"
     IF = "if"
@@ -112,7 +113,7 @@ class FloatType(Type):
 
 
 @dataclass(frozen=True)
-class TensorType(Type):
+class BufferType(Type):
     shape: tuple[Any, ...]
     element_type: Type
     memory_space: MemorySpace = "global"
@@ -120,7 +121,18 @@ class TensorType(Type):
     def __str__(self) -> str:
         shape_text = "x".join(str(dim) for dim in self.shape)
         prefix = f"{shape_text}x" if shape_text else ""
-        return f"tensor<{prefix}{self.element_type}, {self.memory_space}>"
+        return f"buffer<{prefix}{self.element_type}, {self.memory_space}>"
+
+
+@dataclass(frozen=True)
+class TileType(Type):
+    shape: tuple[Any, ...]
+    element_type: Type
+
+    def __str__(self) -> str:
+        shape_text = "x".join(str(dim) for dim in self.shape)
+        prefix = f"{shape_text}x" if shape_text else ""
+        return f"tile<{prefix}{self.element_type}>"
 
 
 @dataclass(frozen=True)
@@ -493,8 +505,15 @@ class IRBuilder:
     ) -> Value:
         return self.emit_value(
             OpName.ALLOC,
-            type_=TensorType(shape, element_type, memory_space),
+            type_=BufferType(shape, element_type, memory_space),
             attrs={"shape": shape, "memory_space": memory_space, "name_hint": name_hint},
+        )
+
+    def empty_tile(self, shape: tuple[Any, ...], element_type: Type) -> Value:
+        return self.emit_value(
+            OpName.TILE_EMPTY,
+            type_=TileType(shape, element_type),
+            attrs={"shape": shape},
         )
 
     def load(self, tensor: ValueLike, indices: list[ValueLike], *, type_: Type) -> Value:

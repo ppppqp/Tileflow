@@ -21,7 +21,16 @@ def alloc_shared(shape: ShapeType, dtype: dtype) -> TensorValue:
 
 
 def alloc_fragment(shape: ShapeType, dtype: dtype) -> TensorValue:
-    return _alloc_tensor(shape, dtype, memory_space="fragment")
+    from tileflow.language.ir import current_builder
+
+    normalized_shape = _normalize_shape(shape)
+    value = current_builder().empty_tile(normalized_shape, dtype)
+    return TensorValue(
+        name="",
+        value=value,
+        shape=normalized_shape,
+        element_type=dtype,
+    )
 
 
 def _alloc_tensor(shape: ShapeType, dtype: dtype, *, memory_space: MemorySpace) -> TensorValue:

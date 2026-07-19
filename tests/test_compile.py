@@ -1,6 +1,6 @@
 import tileflow
 import tileflow.language as T
-from tileflow.language.ir import OpName, TensorType
+from tileflow.language.ir import BufferType, OpName
 
 
 @tileflow.jit
@@ -26,5 +26,5 @@ def test_compile_can_require_native_mlir():
     assert len(compiled.ir.outputs) == 1
     output = compiled.ir.outputs[0]
     assert output.source_name == "C"
-    assert isinstance(output.value.type, TensorType)
+    assert isinstance(output.value.type, BufferType)
     assert output.value.type.memory_space == "global"

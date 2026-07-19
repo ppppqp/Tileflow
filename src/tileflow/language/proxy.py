@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from tileflow.language.ir import TensorType, Type, Value
+from tileflow.language.ir import BufferType, TileType, Type, Value
 from tileflow.typing import ShapeType, dtype
 
 
@@ -20,8 +20,8 @@ class TensorAnnotation:
     shape: tuple[Any, ...]
     element_type: Type
 
-    def tensor_type(self) -> TensorType:
-        return TensorType(self.shape, self.element_type)
+    def buffer_type(self) -> BufferType:
+        return BufferType(self.shape, self.element_type)
 
 
 @dataclass(frozen=True)
@@ -32,8 +32,8 @@ class TensorValue:
     element_type: Type
 
     @property
-    def type(self) -> TensorType:
-        if not isinstance(self.value.type, TensorType):
+    def type(self) -> BufferType | TileType:
+        if not isinstance(self.value.type, (BufferType, TileType)):
             raise TypeError(f"tensor value has non-tensor IR type {self.value.type}")
         return self.value.type
 
