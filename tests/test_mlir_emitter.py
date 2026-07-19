@@ -1,9 +1,5 @@
-import pytest
-
-# pytest.importorskip("mlir.ir")
-
 from tileflow.compiler.mlir_emitter import emit_upstream_mlir
-from tileflow.language.ir import BufferType, FloatType, IRBuilder, OpName, Region
+from tileflow.language.ir import BufferType, FloatType, IRBuilder, IndexType, OpName, Region
 
 
 def _build_scalar_kernel():
@@ -63,6 +59,42 @@ def _build_if_kernel():
     return builder.ir
 
 
+def _build_parallel_kernel():
+    f32 = FloatType(32)
+    buffer_type = BufferType((16,), f32)
+    with IRBuilder("parallel_copy") as builder:
+        source = builder.argument("source", 0, buffer_type)
+        output = builder.output("output", 0, buffer_type)
+        grid = builder.const(1)
+        kernel_body = Region()
+        program_id = builder.new_value(IndexType(), owner=kernel_body.entry)
+        kernel_body.entry.args.append(program_id)
+        with builder.region(kernel_body):
+            lower = builder.const(0)
+            upper = builder.const(16)
+            step = builder.const(1)
+            parallel_body = Region()
+            index = builder.new_value(IndexType(), owner=parallel_body.entry)
+            parallel_body.entry.args.append(index)
+            with builder.region(parallel_body):
+                value = builder.load(source, [index], type_=f32)
+                builder.store(value, output, [index])
+            builder.append_op(
+                OpName.PARALLEL,
+                [lower, upper, step],
+                attrs={"rank": 1},
+                regions=[parallel_body],
+            )
+        builder.append_op(
+            OpName.KERNEL,
+            [grid],
+            attrs={"rank": 1, "threads": 128},
+            regions=[kernel_body],
+        )
+        builder.return_op([output])
+    return builder.ir
+
+
 def test_emits_scalar_arithmetic_and_memory_operations():
     module = emit_upstream_mlir(_build_scalar_kernel())
     assert module.operation.verify()
@@ -84,3 +116,12 @@ def test_emits_comparison_and_structured_if():
     text = str(module)
     assert "arith.cmpf ogt" in text
     assert "scf.if" in text
+
+
+def test_emits_tileflow_kernel_and_parallel_regions():
+    module = emit_upstream_mlir(_build_parallel_kernel())
+    assert module.operation.verify()
+    text = str(module)
+    assert '"tileflow.kernel"' in text
+    assert '"tileflow.parallel"' in text
+    assert "operandSegmentSizes = array<i32: 1, 1, 1>" in text

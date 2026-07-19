@@ -24,12 +24,12 @@ def TileFlow_KernelOp : TileFlow_Op<"kernel", [
   ]> {
   let summary = "logical TileFlow GPU kernel";
   let description = [{
-    Defines the body of one logical GPU kernel. Operands are the buffers and
-    scalar values captured by the kernel. The entry block has one argument for
-    every operand with the same type. Grid and block mapping remain logical at
-    this level and are materialized by GPU lowering passes.
+    Defines the body of one logical GPU kernel. Operands are its grid extents,
+    and the entry block exposes the corresponding logical program identifiers
+    as index arguments. Values defined outside the operation remain visible in
+    the body. Block mapping is materialized by later GPU lowering passes.
   }];
-  let arguments = (ins Variadic<AnyType>:$captures,
+  let arguments = (ins Variadic<Index>:$grid,
                        I64Attr:$grid_rank,
                        OptionalAttr<I64Attr>:$threads,
                        OptionalAttr<DenseI64ArrayAttr>:$cluster_dims);

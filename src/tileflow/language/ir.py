@@ -60,6 +60,7 @@ class OpName(StrEnum):
     RETURN = "return"
     KERNEL = "kernel"
     ASSERT = "assert"
+    CEILDIV = "ceildiv"
 
 
 TERMINATORS = {

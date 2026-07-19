@@ -77,15 +77,10 @@ class Builder:
             # should we differentiate?
             yield ivs[0] if len(ivs) == 1 else ivs
 
-        operands: list[Value] = []
-        for dim in spec.dims:
-            operands.extend(
-                [
-                    self.ir_builder.ensure_value(dim.lo),
-                    self.ir_builder.ensure_value(dim.hi),
-                    self.ir_builder.ensure_value(dim.step),
-                ]
-            )
+        lower_bounds = [self.ir_builder.ensure_value(dim.lo) for dim in spec.dims]
+        upper_bounds = [self.ir_builder.ensure_value(dim.hi) for dim in spec.dims]
+        steps = [self.ir_builder.ensure_value(dim.step) for dim in spec.dims]
+        operands = [*lower_bounds, *upper_bounds, *steps]
         op_names = {
             "serial": OpName.SERIAL_FOR,
             "parallel": OpName.PARALLEL,

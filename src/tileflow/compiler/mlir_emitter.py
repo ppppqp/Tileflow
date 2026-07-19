@@ -7,6 +7,7 @@ from typing import Any
 from tileflow.compiler.mlir_types import _load_ir, to_mlir_type
 from tileflow.language.ir import (
     BoolType,
+    BufferType,
     FloatType,
     IndexType,
     IntType,
@@ -14,6 +15,7 @@ from tileflow.language.ir import (
     OpName,
     Operation,
     Region,
+    TileType,
     Value,
 )
 
@@ -87,19 +89,24 @@ class MLIREmitter:
             OpName.AND: self._emit_binary,
             OpName.OR: self._emit_binary,
             OpName.NOT: self._emit_binary,
+            OpName.CEILDIV: self._emit_ceildiv,
             OpName.SELECT: self._emit_select,
             OpName.ALLOC: self._emit_alloc,
             OpName.TILE_EMPTY: self._emit_tile_empty,
             OpName.LOAD: self._emit_load,
             OpName.STORE: self._emit_store,
             OpName.SERIAL_FOR: self._emit_serial_for,
+            OpName.PARALLEL: self._emit_parallel,
+            OpName.KERNEL: self._emit_kernel,
             OpName.IF: self._emit_if,
             OpName.WHILE: self._emit_while,
         }
         try:
             handler = handlers[op.name]
         except KeyError as exc:
-            raise MLIREmissionError(f"direct MLIR emission is not implemented for {op.name}") from exc
+            raise MLIREmissionError(
+                f"direct MLIR emission is not implemented for {op.name}"
+            ) from exc
         handler(op)
 
     def _lookup(self, value: Value) -> Any:
@@ -116,6 +123,51 @@ class MLIREmitter:
             )
         for frontend, mlir_value in zip(op.results, results, strict=True):
             self.values[frontend] = mlir_value
+
+    def _coerce(self, value: Value, target: Any) -> Any:
+        """Coerce a SSA value to type required by MLIR operation consuming it.
+        We should maybe emit CAST before MLIR emission.
+        """
+        source = value.type
+        emitted_value = self._lookup(value)
+        if source == target:
+            return emitted_value
+        if isinstance(source, FloatType) and isinstance(target, FloatType):
+            name = "arith.extf" if source.bits < target.bits else "arith.truncf"
+        elif isinstance(source, (IndexType, IntType, BoolType)) and isinstance(
+            target, (IndexType, IntType, BoolType)
+        ):
+            if isinstance(source, IndexType) != isinstance(target, IndexType):
+                name = "arith.index_cast"
+            elif getattr(source, "bits", 64) < getattr(target, "bits", 64):
+                name = "arith.extsi"
+            else:
+                name = "arith.trunci"
+        elif isinstance(source, IndexType) and isinstance(target, FloatType):
+            i64 = self.ir.IntegerType.get_signless(64)
+            integer = self.ir.Operation.create(
+                "arith.index_cast", operands=[emitted_value], results=[i64]
+            ).results[0]
+            return self.ir.Operation.create(
+                "arith.sitofp", operands=[integer], results=[to_mlir_type(target)]
+            ).results[0]
+        elif isinstance(source, (IntType, BoolType)) and isinstance(target, FloatType):
+            name = "arith.sitofp"
+        elif isinstance(source, FloatType) and isinstance(target, IndexType):
+            i64 = self.ir.IntegerType.get_signless(64)
+            integer = self.ir.Operation.create(
+                "arith.fptosi", operands=[emitted_value], results=[i64]
+            ).results[0]
+            return self.ir.Operation.create(
+                "arith.index_cast", operands=[integer], results=[to_mlir_type(target)]
+            ).results[0]
+        elif isinstance(source, FloatType) and isinstance(target, (IntType, BoolType)):
+            name = "arith.fptosi"
+        else:
+            raise MLIREmissionError(f"cannot coerce {source} to {target}")
+        return self.ir.Operation.create(
+            name, operands=[emitted_value], results=[to_mlir_type(target)]
+        ).results[0]
 
     def _emit_constant(self, op: Operation) -> None:
         ir = self.ir
@@ -142,9 +194,11 @@ class MLIREmitter:
         elif isinstance(source, (IndexType, IntType, BoolType)) and isinstance(
             target, (IndexType, IntType, BoolType)
         ):
-            name = "arith.index_cast" if isinstance(source, IndexType) != isinstance(
-                target, IndexType
-            ) else "arith.extsi"
+            name = (
+                "arith.index_cast"
+                if isinstance(source, IndexType) != isinstance(target, IndexType)
+                else "arith.extsi"
+            )
         elif isinstance(source, (IndexType, IntType, BoolType)) and isinstance(target, FloatType):
             name = "arith.sitofp"
         elif isinstance(source, FloatType) and isinstance(target, (IndexType, IntType, BoolType)):
@@ -190,7 +244,7 @@ class MLIREmitter:
             name = names[op.name]
         except KeyError as exc:
             raise MLIREmissionError(f"unsupported {type_} operation {op.name}") from exc
-        operands = [self._lookup(value) for value in op.operands]
+        operands = [self._coerce(value, op.results[0].type) for value in op.operands]
         if op.name == OpName.NOT:
             true_attr = self.ir.IntegerAttr.get(to_mlir_type(BoolType()), 1)
             true_op = self.ir.Operation.create(
@@ -221,15 +275,28 @@ class MLIREmitter:
         )
         emitted = self.ir.Operation.create(
             "arith.cmpf" if is_float else "arith.cmpi",
-            operands=[self._lookup(value) for value in op.operands],
+            operands=[self._coerce(value, op.operands[0].type) for value in op.operands],
             results=[to_mlir_type(BoolType())],
             attributes={"predicate": predicate},
         )
         self._bind_results(op, emitted)
 
     def _emit_select(self, op: Operation) -> None:
+        target = op.results[0].type
         emitted = self.ir.Operation.create(
             "arith.select",
+            operands=[
+                self._lookup(op.operands[0]),
+                self._coerce(op.operands[1], target),
+                self._coerce(op.operands[2], target),
+            ],
+            results=[to_mlir_type(target)],
+        )
+        self._bind_results(op, emitted)
+
+    def _emit_ceildiv(self, op: Operation) -> None:
+        emitted = self.ir.Operation.create(
+            "arith.ceildivui",
             operands=[self._lookup(value) for value in op.operands],
             results=[to_mlir_type(op.results[0].type)],
         )
@@ -250,17 +317,78 @@ class MLIREmitter:
         self._bind_results(op, emitted)
 
     def _emit_load(self, op: Operation) -> None:
+        name = "tileflow.load" if isinstance(op.results[0].type, TileType) else "memref.load"
         emitted = self.ir.Operation.create(
-            "memref.load",
+            name,
             operands=[self._lookup(value) for value in op.operands],
             results=[to_mlir_type(op.results[0].type)],
         )
         self._bind_results(op, emitted)
 
     def _emit_store(self, op: Operation) -> None:
+        name = "tileflow.store" if isinstance(op.operands[0].type, TileType) else "memref.store"
+        value = self._lookup(op.operands[0])
+        target_type = op.operands[1].type
+        if isinstance(target_type, BufferType):
+            value = self._coerce(op.operands[0], target_type.element_type)
         self.ir.Operation.create(
-            "memref.store", operands=[self._lookup(value) for value in op.operands]
+            name,
+            operands=[value, *[self._lookup(item) for item in op.operands[1:]]],
         )
+
+    def _i64_attr(self, value: int) -> Any:
+        return self.ir.IntegerAttr.get(self.ir.IntegerType.get_signless(64), value)
+
+    def _emit_kernel(self, op: Operation) -> None:
+        rank = op.attrs.get("rank")
+        if not isinstance(rank, int) or rank != len(op.operands):
+            raise MLIREmissionError("kernel rank must match its grid extent count")
+        attributes = {"grid_rank": self._i64_attr(rank)}
+        if "threads" in op.attrs:
+            attributes["threads"] = self._i64_attr(op.attrs["threads"])
+        if "cluster_dims" in op.attrs:
+            attributes["cluster_dims"] = self.ir.DenseI64ArrayAttr.get(
+                list(op.attrs["cluster_dims"])
+            )
+        emitted = self.ir.Operation.create(
+            "tileflow.kernel",
+            operands=[self._lookup(value) for value in op.operands],
+            attributes=attributes,
+            regions=1,
+        )
+        body = emitted.regions[0].blocks.append(*[to_mlir_type(IndexType()) for _ in range(rank)])
+        self._emit_structured_body(op, body, "tileflow.yield")
+
+    def _emit_parallel(self, op: Operation) -> None:
+        rank = op.attrs.get("rank")
+        if not isinstance(rank, int) or rank < 1 or len(op.operands) != 3 * rank:
+            raise MLIREmissionError("parallel loop requires equally sized bound and step lists")
+        attributes = {"operandSegmentSizes": self.ir.DenseI32ArrayAttr.get([rank, rank, rank])}
+        mapping = op.attrs.get("mapping")
+        if mapping is not None:
+            if not isinstance(mapping, dict):
+                raise MLIREmissionError("parallel mapping must be a dictionary")
+            attributes["mapping"] = self.ir.DictAttr.get(
+                {key: self.ir.StringAttr.get(str(value)) for key, value in mapping.items()}
+            )
+        emitted = self.ir.Operation.create(
+            "tileflow.parallel",
+            operands=[self._lookup(value) for value in op.operands],
+            attributes=attributes,
+            regions=1,
+        )
+        body = emitted.regions[0].blocks.append(*[to_mlir_type(IndexType()) for _ in range(rank)])
+        self._emit_structured_body(op, body, "tileflow.yield")
+
+    def _emit_structured_body(self, op: Operation, body: Any, terminator: str) -> None:
+        frontend_body = op.regions[0].entry
+        if len(frontend_body.args) != len(body.arguments):
+            raise MLIREmissionError(f"{op.name} region argument count does not match its rank")
+        for frontend, mlir_value in zip(frontend_body.args, body.arguments, strict=True):
+            self.values[frontend] = mlir_value
+        with self.ir.InsertionPoint(body):
+            self._emit_region_contents(op.regions[0])
+            self.ir.Operation.create(terminator)
 
     def _emit_serial_for(self, op: Operation) -> None:
         if op.attrs.get("rank") != 1 or len(op.operands) != 3:
@@ -300,7 +428,11 @@ class MLIREmitter:
             for nested in condition_region.entry.ops:
                 self._emit_op(nested)
             terminator = condition_region.entry.terminator
-            if terminator is None or terminator.name != OpName.YIELD or len(terminator.operands) != 1:
+            if (
+                terminator is None
+                or terminator.name != OpName.YIELD
+                or len(terminator.operands) != 1
+            ):
                 raise MLIREmissionError("while condition must yield exactly one condition")
             self.ir.Operation.create(
                 "scf.condition", operands=[self._lookup(terminator.operands[0])]
@@ -318,5 +450,7 @@ def emit_upstream_mlir(kernel: KernelIR, *, context: Any | None = None) -> Any:
 
     ir = _load_ir()
     context = context or ir.Context()
-    context.allow_unregistered_dialects = False
+    # The native extension registers TileFlow. Generic construction keeps this
+    # emitter usable with a standalone upstream MLIR Python package as well.
+    context.allow_unregistered_dialects = True
     return MLIREmitter(context).emit(kernel)

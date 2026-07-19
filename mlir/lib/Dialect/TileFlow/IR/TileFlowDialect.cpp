@@ -20,13 +20,15 @@ LogicalResult tileflow::KernelOp::verify() {
     return emitOpError("requires grid_rank in the range [1, 3]");
   if (getThreads() && *getThreads() == 0)
     return emitOpError("requires a positive thread count");
+  if (getGrid().size() != getGridRank())
+    return emitOpError("requires one grid extent per grid dimension");
 
   Block &entry = getBody().front();
-  if (entry.getNumArguments() != getCaptures().size())
-    return emitOpError("requires one body argument per captured value");
-  for (auto [argument, capture] : llvm::zip_equal(entry.getArguments(), getCaptures()))
-    if (argument.getType() != capture.getType())
-      return emitOpError("body argument types must match capture types");
+  if (entry.getNumArguments() != getGridRank())
+    return emitOpError("requires one body program identifier per grid dimension");
+  if (llvm::any_of(entry.getArgumentTypes(),
+                   [](Type type) { return !type.isIndex(); }))
+    return emitOpError("requires index-typed body arguments");
   return success();
 }
 
