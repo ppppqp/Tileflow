@@ -86,11 +86,15 @@ class Builder:
                     self.ir_builder.ensure_value(dim.step),
                 ]
             )
+        op_names = {
+            "serial": OpName.SERIAL_FOR,
+            "parallel": OpName.PARALLEL,
+            "pipelined": OpName.PIPELINED_FOR,
+        }
         self.ir_builder.append_op(
-            OpName.FOR,
+            op_names[spec.kind],
             operands,
             attrs={
-                "kind": spec.kind,
                 "rank": len(spec.dims),
                 **spec.attrs,
             },

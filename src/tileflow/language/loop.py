@@ -16,7 +16,7 @@ class ForDim:
 @dataclass(frozen=True)
 class ForSpec:
     dims: tuple[ForDim, ...]
-    kind: LoopKind = "for"
+    kind: LoopKind = "serial"
     attrs: dict[str, Any] = field(default_factory=dict)
 
     @property

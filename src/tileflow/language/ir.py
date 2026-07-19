@@ -16,7 +16,7 @@ from typing import Any, Literal
 
 
 MemorySpace = Literal["global", "shared", "local", "fragment", "register", "unknown"]
-LoopKind = Literal["for", "serial", "parallel", "pipelined"]
+LoopKind = Literal["serial", "parallel", "pipelined"]
 
 
 class OpName(StrEnum):
@@ -51,7 +51,9 @@ class OpName(StrEnum):
     STORE = "store"
     IF = "if"
     WHILE = "while"
-    FOR = "for"
+    SERIAL_FOR = "serial_for"
+    PARALLEL = "parallel"
+    PIPELINED_FOR = "pipelined_for"
     YIELD = "yield"
     BREAK = "break"
     CONTINUE = "continue"
