@@ -258,7 +258,7 @@ class Region:
 
 @dataclass
 class Operation:
-    name: OpName | str
+    name: OpName
     operands: list[Value] = field(default_factory=list)
     results: list[Value] = field(default_factory=list)
     attrs: dict[str, AttrValue] = field(default_factory=dict)

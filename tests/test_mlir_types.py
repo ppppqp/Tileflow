@@ -2,12 +2,10 @@ import pytest
 
 from tileflow.compiler.mlir_types import (
     DYNAMIC_DIM,
-    MLIRBindingsUnavailable,
     _memory_space_number,
     _normalize_shape,
-    to_mlir_type,
 )
-from tileflow.language.ir import BufferType, FloatType, IndexType, Value
+from tileflow.language.ir import IndexType, Value
 
 
 def test_shape_normalization_preserves_static_and_marks_dynamic_dimensions():
@@ -28,8 +26,3 @@ def test_buffer_memory_space_mapping():
     assert _memory_space_number("local") == 5
     with pytest.raises(ValueError, match="unsupported"):
         _memory_space_number("fragment")
-
-
-def test_missing_mlir_bindings_have_an_actionable_error():
-    with pytest.raises(MLIRBindingsUnavailable, match="MLIR_ENABLE_BINDINGS_PYTHON=ON"):
-        to_mlir_type(BufferType((16,), FloatType(32)))

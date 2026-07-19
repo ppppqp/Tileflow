@@ -35,6 +35,8 @@ If your local LLVM build is at `/home/qiping-pan/Documents/workspace/llvm/llvm-p
 export LLVM_BUILD=/home/qiping-pan/Documents/workspace/llvm/llvm-project/build
 export LLVM_DIR="$LLVM_BUILD/lib/cmake/llvm"
 export MLIR_DIR="$LLVM_BUILD/lib/cmake/mlir"
+export MLIR_PYTHON_ROOT="$LLVM_BUILD/tools/mlir/python_packages/mlir_core"
+export PYTHONPATH="$MLIR_PYTHON_ROOT${PYTHONPATH:+:$PYTHONPATH}"
 export PATH="$LLVM_BUILD/bin:$PATH"
 ```
 
@@ -85,6 +87,26 @@ Build the optional Python extension:
 
 ```bash
 ninja -C build tileflow_mlir
+```
+
+The direct Python-to-MLIR emitter also requires LLVM's MLIR Python bindings.
+Configure and build them in the LLVM checkout, then expose the generated package:
+
+```bash
+cmake -S "$LLVM_BUILD/../llvm" -B "$LLVM_BUILD" \
+  -DMLIR_ENABLE_BINDINGS_PYTHON=ON \
+  -DPython3_EXECUTABLE="$PWD/.venv/bin/python"
+cmake --build "$LLVM_BUILD" --target MLIRPythonModules -j"$(nproc)"
+
+export MLIR_PYTHON_ROOT="$LLVM_BUILD/tools/mlir/python_packages/mlir_core"
+export PYTHONPATH="$MLIR_PYTHON_ROOT${PYTHONPATH:+:$PYTHONPATH}"
+```
+
+Add the two exports to `~/.bashrc` to make the bindings available in new shells.
+Verify the setup with:
+
+```bash
+.venv/bin/python -c "from mlir import ir; print(ir.Context())"
 ```
 
 For editable development, install the Python package and copy the extension into
