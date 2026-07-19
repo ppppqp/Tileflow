@@ -22,6 +22,9 @@ def test_compile_can_require_native_mlir():
     B = T.Tensor((1024,), T.float32)
     compiled = add.compile(A=A, B=B, N=1024)
     print(compiled.mlir)
-    allocation = next(op for op in compiled.ir.body.entry.ops if op.name == OpName.ALLOC)
-    assert isinstance(allocation.results[0].type, TensorType)
-    assert allocation.results[0].type.memory_space == "global"
+    assert not any(op.name == OpName.ALLOC for op in compiled.ir.body.entry.ops)
+    assert len(compiled.ir.outputs) == 1
+    output = compiled.ir.outputs[0]
+    assert output.source_name == "C"
+    assert isinstance(output.value.type, TensorType)
+    assert output.value.type.memory_space == "global"

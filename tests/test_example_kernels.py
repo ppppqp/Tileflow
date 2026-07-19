@@ -145,7 +145,8 @@ def test_example_compiles(name: str, kernel: object, params: dict[str, int]):
     compiled: CompiledKernel = kernel.compile(**params)  # type: ignore[attr-defined]
     assert compiled.name
     assert "func.func" in compiled.mlir
-    assert any(op.name == OpName.ALLOC for op in compiled.ir.body.entry.ops), name
+    assert compiled.ir.outputs, name
+    assert not any(op.name == OpName.ALLOC for op in compiled.ir.body.entry.ops), name
     assert any(op.name == OpName.KERNEL for op in compiled.ir.body.entry.ops), name
 
 

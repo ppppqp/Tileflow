@@ -131,6 +131,13 @@ class KernelParam:
 
 
 @dataclass(frozen=True)
+class KernelOutput:
+    source_name: str
+    index: int
+    value: Value
+
+
+@dataclass(frozen=True)
 class Value:
     id: int
     type: Type
@@ -249,6 +256,7 @@ class Operation:
 class KernelIR:
     name: str
     params: list[KernelParam] = field(default_factory=list)
+    outputs: list[KernelOutput] = field(default_factory=list)
     body: Region = field(default_factory=Region)
     span: Span | None = None
 
@@ -363,6 +371,24 @@ class IRBuilder:
         )
         self.current_block.args.append(value)
         self.ir.params.append(KernelParam(source_name=source_name, index=index, value=value))
+        return value
+
+    def output(
+        self,
+        source_name: str,
+        index: int,
+        type_: Type,
+        *,
+        name_hint: str | None = None,
+        span: Span | None = None,
+    ) -> Value:
+        if self.current_region is not self.ir.body:
+            raise IRBuilderError("kernel outputs must be declared in the top-level region")
+        value = self.new_value(
+            type_, name_hint=name_hint or source_name, owner=self.ir.body.entry, span=span
+        )
+        self.ir.body.entry.args.append(value)
+        self.ir.outputs.append(KernelOutput(source_name=source_name, index=index, value=value))
         return value
 
     def append_op(

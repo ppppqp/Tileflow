@@ -37,6 +37,7 @@ class Builder:
         self._next_param_index = (
             0  # next parameter index for function arguments (used for TensorValue binding)
         )
+        self._next_output_index = 0
 
     empty = _empty
 
@@ -255,15 +256,16 @@ class Builder:
     def bind_immut(self, name: str, value: Any) -> Any:
         name_hint = "tmp" if name == "_" else name
         if isinstance(value, OutTensor):
-            allocation = self.ir_builder.alloc(
-                value.shape,
-                value.dtype,
-                memory_space="global",
+            output = self.ir_builder.output(
+                name_hint,
+                self._next_output_index,
+                TensorAnnotation(value.shape, value.dtype).tensor_type(),
                 name_hint=name_hint,
             )
+            self._next_output_index += 1
             return TensorValue(
                 name=name_hint,
-                value=allocation,
+                value=output,
                 shape=value.shape,
                 element_type=value.dtype,
             )

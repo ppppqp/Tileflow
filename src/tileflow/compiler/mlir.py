@@ -6,8 +6,9 @@ from tileflow.language.ir import KernelIR, Operation, Type, Value
 
 
 def emit_mlir(ir: KernelIR) -> str:
+    signature = [*ir.params, *ir.outputs]
     args = ", ".join(
-        f"{param.value.ir_name}: {_mlir_value_type(param.value.type)}" for param in ir.params
+        f"{item.value.ir_name}: {_mlir_value_type(item.value.type)}" for item in signature
     )
     lines = [
         "module {",
