@@ -17,12 +17,6 @@ def add(A, B, N: int):
     return C
 
 
-# def test_compile_emits_mlir_and_pass_metadata():
-#     compiled = add.compile(N=1024)
-
-#     assert compiled.name == "add"
-
-
 def test_compile_can_require_native_mlir():
     A = T.Tensor((1024,), T.float32)
     B = T.Tensor((1024,), T.float32)
