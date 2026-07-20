@@ -5,10 +5,11 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/CAPI/IR.h"
+#include "mlir-c/Bindings/Python/Interop.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Parser/Parser.h"
 #include "mlir/Pass/PassManager.h"
-#include "mlir/InitAllPasses.h"
 #include "mlir/Transforms/Passes.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -28,10 +29,7 @@ void populateRegistry(mlir::DialectRegistry &registry) {
 }
 
 struct RegisterPassesOnLoad {
-  RegisterPassesOnLoad() {
-    mlir::registerAllPasses();
-    tileflow::registerTileFlowPasses();
-  }
+  RegisterPassesOnLoad() { tileflow::registerTileFlowPasses(); }
 } registerPassesOnLoad;
 
 class PassPipeline {
@@ -74,6 +72,14 @@ private:
 
 PYBIND11_MODULE(tileflow_mlir, m) {
   m.doc() = "TileFlow native MLIR pass pipeline bindings";
+  m.def("register_dialects", [](py::object registry) {
+    py::object capsule = registry.attr("_CAPIPtr");
+    MlirDialectRegistry handle =
+        mlirPythonCapsuleToDialectRegistry(capsule.ptr());
+    if (mlirDialectRegistryIsNull(handle))
+      throw py::error_already_set();
+    unwrap(handle)->insert<tileflow::TileFlowDialect>();
+  });
   py::class_<PassPipeline>(m, "PassPipeline")
       .def(py::init<>())
       .def("add", &PassPipeline::add, py::arg("pipeline_text"))

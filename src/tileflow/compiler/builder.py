@@ -5,7 +5,16 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
 
-from tileflow.language.ir import IRBuilder, IndexType, OpName, Region, Span, Value, ValueLike
+from tileflow.language.ir import (
+    Block,
+    IRBuilder,
+    IndexType,
+    OpName,
+    Region,
+    Span,
+    Value,
+    ValueLike,
+)
 from tileflow.language.loop import ForSpec, make_range_spec
 from tileflow.language.proxy import TensorAnnotation, TensorValue
 from tileflow.compiler.ast import _empty
@@ -69,6 +78,11 @@ class Builder:
 
     def ctx_for(self, spec: Any) -> Iterator[Value | tuple[Value, ...]]:
         spec = self.normalize_for_spec(spec)
+        scope = self.bindings[-1]
+        for name, value in list(scope.items()):
+            if isinstance(value, (bool, int, float)):
+                scope[name] = self.ir_builder.ensure_value(value)
+        bindings_before = dict(scope)
         body = Region()
         ivs = tuple(self.ir_builder.new_value(IndexType(), owner=body.entry) for _ in spec.dims)
         body.entry.args.extend(ivs)
@@ -80,21 +94,54 @@ class Builder:
         lower_bounds = [self.ir_builder.ensure_value(dim.lo) for dim in spec.dims]
         upper_bounds = [self.ir_builder.ensure_value(dim.hi) for dim in spec.dims]
         steps = [self.ir_builder.ensure_value(dim.step) for dim in spec.dims]
-        operands = [*lower_bounds, *upper_bounds, *steps]
+        carried: list[tuple[str, Value, Value]] = []
+        # TODO: Think of a better structure to resolve the carried use case
+        # and then we can remove _replace_region_uses potentially
+        for name, initial in bindings_before.items():
+            final = scope.get(name)
+            if (
+                isinstance(initial, Value)
+                and not isinstance(initial.owner, Block)
+                and isinstance(final, Value)
+                and final != initial
+            ):
+                carried.append((name, initial, final))
+        if carried and spec.kind == "parallel":
+            raise NotImplementedError("parallel loops cannot carry sequential SSA values")
+        for _, initial, _ in carried:
+            argument = self.ir_builder.new_value(initial.type, owner=body.entry)
+            body.entry.args.append(argument)
+            self._replace_region_uses(body, initial, argument)
+        if carried:
+            with self.ir_builder.region(body):
+                self.ir_builder.yield_op([final for _, _, final in carried])
+
+        operands = [*lower_bounds, *upper_bounds, *steps, *[initial for _, initial, _ in carried]]
         op_names = {
             "serial": OpName.SERIAL_FOR,
             "parallel": OpName.PARALLEL,
             "pipelined": OpName.PIPELINED_FOR,
         }
-        self.ir_builder.append_op(
+        loop = self.ir_builder.append_op(
             op_names[spec.kind],
             operands,
+            result_types=[initial.type for _, initial, _ in carried],
             attrs={
                 "rank": len(spec.dims),
                 **spec.attrs,
             },
             regions=[body],
         )
+        for (name, _, _), result in zip(carried, loop.results, strict=True):
+            scope[name] = result
+
+    @classmethod
+    def _replace_region_uses(cls, region: Region, old: Value, new: Value) -> None:
+        block = region.entry
+        for op in [*block.ops, *([block.terminator] if block.terminator else [])]:
+            op.operands = [new if operand == old else operand for operand in op.operands]
+            for nested in op.regions:
+                cls._replace_region_uses(nested, old, new)
 
     def ctx_if(self, cond: ValueLike) -> Iterator[IfFrame]:
         frame = IfFrame(

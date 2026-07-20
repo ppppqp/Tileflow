@@ -24,6 +24,25 @@ class MLIREmissionError(RuntimeError):
     pass
 
 
+def create_mlir_context() -> Any:
+    """Create an MLIR context with the native TileFlow dialect registered."""
+
+    ir = _load_ir()
+    try:
+        from tileflow._mlir import tileflow_mlir
+    except ImportError as exc:
+        raise MLIREmissionError(
+            "the native TileFlow MLIR extension is unavailable; build the tileflow_mlir target"
+        ) from exc
+    registry = ir.DialectRegistry()
+    tileflow_mlir.register_dialects(registry)
+    context = ir.Context()
+    context.append_dialect_registry(registry)
+    context.load_all_available_dialects()
+    context.allow_unregistered_dialects = False
+    return context
+
+
 class MLIREmitter:
     """Lower the upstream-compatible subset of frontend IR to real MLIR."""
 
@@ -96,6 +115,7 @@ class MLIREmitter:
             OpName.LOAD: self._emit_load,
             OpName.STORE: self._emit_store,
             OpName.SERIAL_FOR: self._emit_serial_for,
+            OpName.PIPELINED_FOR: self._emit_pipelined_for,
             OpName.PARALLEL: self._emit_parallel,
             OpName.KERNEL: self._emit_kernel,
             OpName.IF: self._emit_if,
@@ -391,19 +411,35 @@ class MLIREmitter:
             self.ir.Operation.create(terminator)
 
     def _emit_serial_for(self, op: Operation) -> None:
-        if op.attrs.get("rank") != 1 or len(op.operands) != 3:
+        num_iter_args = len(op.operands) - 3
+        if op.attrs.get("rank") != 1 or len(op.operands) != 3 + num_iter_args:
             raise MLIREmissionError("scf.for emission requires a rank-1 serial loop")
         emitted = self.ir.Operation.create(
             "scf.for",
             operands=[self._lookup(value) for value in op.operands],
+            results=[to_mlir_type(result.type) for result in op.results],
             regions=1,
         )
-        body = emitted.regions[0].blocks.append(to_mlir_type(IndexType()))
+        body = emitted.regions[0].blocks.append(
+            to_mlir_type(IndexType()),
+            *[to_mlir_type(value.type) for value in op.operands[3:]],
+        )
         frontend_body = op.regions[0].entry
-        self.values[frontend_body.args[0]] = body.arguments[0]
+        if len(frontend_body.args) != len(body.arguments):
+            raise MLIREmissionError("serial loop body arguments do not match its iter_args")
+        for frontend, mlir_value in zip(frontend_body.args, body.arguments, strict=True):
+            self.values[frontend] = mlir_value
         with self.ir.InsertionPoint(body):
-            self._emit_region_contents(op.regions[0])
-            self.ir.Operation.create("scf.yield")
+            for nested in frontend_body.ops:
+                self._emit_op(nested)
+            yielded = [] if frontend_body.terminator is None else [
+                self._lookup(value) for value in frontend_body.terminator.operands
+            ]
+            self.ir.Operation.create("scf.yield", operands=yielded)
+        self._bind_results(op, emitted)
+
+    def _emit_pipelined_for(self, op: Operation) -> None:
+        self._emit_serial_for(op)
 
     def _emit_if(self, op: Operation) -> None:
         emitted = self.ir.Operation.create(
@@ -448,9 +484,5 @@ class MLIREmitter:
 def emit_upstream_mlir(kernel: KernelIR, *, context: Any | None = None) -> Any:
     """Emit the upstream-compatible subset into a real ``mlir.ir.Module``."""
 
-    ir = _load_ir()
-    context = context or ir.Context()
-    # The native extension registers TileFlow. Generic construction keeps this
-    # emitter usable with a standalone upstream MLIR Python package as well.
-    context.allow_unregistered_dialects = True
+    context = context or create_mlir_context()
     return MLIREmitter(context).emit(kernel)

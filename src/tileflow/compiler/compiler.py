@@ -65,9 +65,12 @@ class CompiledKernel:
         self.compile_kernel()
 
     def compile_kernel(self):
-        from tileflow.compiler.mlir import emit_mlir
+        from tileflow.compiler.mlir_emitter import emit_upstream_mlir
 
-        self.mlir = emit_mlir(self.ir)
+        module = emit_upstream_mlir(self.ir)
+        if not module.operation.verify():
+            raise RuntimeError("emitted TileFlow MLIR failed verification")
+        self.mlir = str(module)
 
     def __call__(self, *args, **kwargs):
         self.torch_function(*args, **kwargs)

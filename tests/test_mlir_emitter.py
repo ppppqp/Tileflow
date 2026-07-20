@@ -1,4 +1,4 @@
-from tileflow.compiler.mlir_emitter import emit_upstream_mlir
+from tileflow.compiler.mlir_emitter import create_mlir_context, emit_upstream_mlir
 from tileflow.language.ir import BufferType, FloatType, IRBuilder, IndexType, OpName, Region
 
 
@@ -125,3 +125,9 @@ def test_emits_tileflow_kernel_and_parallel_regions():
     assert '"tileflow.kernel"' in text
     assert '"tileflow.parallel"' in text
     assert "operandSegmentSizes = array<i32: 1, 1, 1>" in text
+
+
+def test_native_tileflow_dialect_is_registered():
+    context = create_mlir_context()
+    assert context.is_registered_operation("tileflow.kernel")
+    assert context.is_registered_operation("tileflow.parallel")
